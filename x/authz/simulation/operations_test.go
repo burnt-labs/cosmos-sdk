@@ -42,9 +42,11 @@ type SimTestSuite struct {
 	accountKeeper     authkeeper.AccountKeeper
 	bankKeeper        bankkeeper.Keeper
 	authzKeeper       authzkeeper.Keeper
+	keepers           map[string]interface{}
 }
 
 func (suite *SimTestSuite) SetupTest() {
+	keepers := make(map[string]interface{}, 1)
 	app, err := simtestutil.Setup(
 		depinject.Configs(
 			testutil.AppConfig,
@@ -57,6 +59,7 @@ func (suite *SimTestSuite) SetupTest() {
 		&suite.accountKeeper,
 		&suite.bankKeeper,
 		&suite.authzKeeper,
+		&keepers,
 	)
 	suite.Require().NoError(err)
 	suite.app = app

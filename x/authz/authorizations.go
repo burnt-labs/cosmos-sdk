@@ -38,3 +38,10 @@ type AcceptResponse struct {
 	// it must use the updated version and handle the update on the storage level.
 	Updated Authorization
 }
+
+// AuthorizationWithKeepers represents the interface of various Authorization types implemented
+// by other modules, with additional state checks
+type AuthorizationWithKeepers interface {
+	Authorization
+	AcceptWithStateChecks(ctx context.Context, msg sdk.Msg, keepers map[string]interface{}) (AcceptResponse, error)
+}

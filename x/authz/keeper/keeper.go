@@ -35,15 +35,17 @@ type Keeper struct {
 	router       baseapp.MessageRouter
 	authKeeper   authz.AccountKeeper
 	bankKeeper   authz.BankKeeper
+	keepers      map[string]interface{}
 }
 
 // NewKeeper constructs a message authorization Keeper
-func NewKeeper(storeService corestoretypes.KVStoreService, cdc codec.Codec, router baseapp.MessageRouter, ak authz.AccountKeeper) Keeper {
+func NewKeeper(storeService corestoretypes.KVStoreService, cdc codec.Codec, router baseapp.MessageRouter, ak authz.AccountKeeper, keepers map[string]interface{}) Keeper {
 	return Keeper{
 		storeService: storeService,
 		cdc:          cdc,
 		router:       router,
 		authKeeper:   ak,
+		keepers:      keepers,
 	}
 }
 
@@ -134,15 +136,18 @@ func (k Keeper) DispatchActions(ctx context.Context, grantee sdk.AccAddress, msg
 				return nil, authz.ErrAuthorizationExpired
 			}
 
-			authorization, err := grant.GetAuthorization()
-			if err != nil {
-				return nil, err
-			}
+			resp, err := k.acceptAuthorization(ctx, grant, msg)
+			/*
+				authorization, err := grant.GetAuthorization()
+				if err != nil {
+					return nil, err
+				}
 
-			resp, err := authorization.Accept(sdkCtx, msg)
-			if err != nil {
-				return nil, err
-			}
+				resp, err := authorization.Accept(sdkCtx, msg)
+				if err != nil {
+					return nil, err
+				}
+			*/
 
 			if resp.Delete {
 				err = k.DeleteGrant(ctx, grantee, granter, sdk.MsgTypeURL(msg))
@@ -448,4 +453,27 @@ func (k Keeper) DequeueAndDeleteExpiredGrants(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (k Keeper) acceptAuthorization(ctx context.Context, grant authz.Grant, msg sdk.Msg) (authz.AcceptResponse, error) {
+	authorization, err := grant.GetAuthorization()
+	if err != nil {
+		return authz.AcceptResponse{}, err
+	}
+
+	a, ok := authorization.(authz.AuthorizationWithKeepers)
+	if !ok {
+		resp, err := authorization.Accept(ctx, msg)
+		if err != nil {
+			return authz.AcceptResponse{}, err
+		}
+		return resp, err
+	}
+
+	resp, err := a.AcceptWithStateChecks(ctx, msg, k.keepers)
+	if err != nil {
+		return authz.AcceptResponse{}, err
+	}
+
+	return resp, err
 }

@@ -64,8 +64,9 @@ func TestExpiredGrantsQueue(t *testing.T) {
 	accountKeeper.EXPECT().GetAccount(gomock.Any(), grantee4).Return(authtypes.NewBaseAccountWithAddress(grantee4)).AnyTimes()
 
 	accountKeeper.EXPECT().AddressCodec().Return(address.NewBech32Codec("cosmos")).AnyTimes()
+	keepers := make(map[string]interface{}, 1)
 
-	authzKeeper := keeper.NewKeeper(storeService, encCfg.Codec, baseApp.MsgServiceRouter(), accountKeeper)
+	authzKeeper := keeper.NewKeeper(storeService, encCfg.Codec, baseApp.MsgServiceRouter(), accountKeeper, keepers)
 
 	save := func(grantee sdk.AccAddress, exp *time.Time) {
 		err := authzKeeper.SaveGrant(ctx, grantee, granter, sendAuthz, exp)

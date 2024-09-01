@@ -66,8 +66,9 @@ func (suite *GenesisTestSuite) SetupTest() {
 
 	msr := suite.baseApp.MsgServiceRouter()
 	msr.SetInterfaceRegistry(suite.encCfg.InterfaceRegistry)
+	keepers := make(map[string]interface{}, 1)
 
-	suite.keeper = keeper.NewKeeper(storeService, suite.encCfg.Codec, msr, suite.accountKeeper)
+	suite.keeper = keeper.NewKeeper(storeService, suite.encCfg.Codec, msr, suite.accountKeeper, keepers)
 }
 
 func (suite *GenesisTestSuite) TestImportExportGenesis() {

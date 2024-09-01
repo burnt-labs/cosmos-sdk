@@ -166,6 +166,7 @@ type ModuleInputs struct {
 	Registry         cdctypes.InterfaceRegistry
 	MsgServiceRouter baseapp.MessageRouter
 	StoreService     store.KVStoreService
+	Keepers          map[string]interface{}
 }
 
 type ModuleOutputs struct {
@@ -176,7 +177,7 @@ type ModuleOutputs struct {
 }
 
 func ProvideModule(in ModuleInputs) ModuleOutputs {
-	k := keeper.NewKeeper(in.StoreService, in.Cdc, in.MsgServiceRouter, in.AccountKeeper)
+	k := keeper.NewKeeper(in.StoreService, in.Cdc, in.MsgServiceRouter, in.AccountKeeper, in.Keepers)
 	m := NewAppModule(in.Cdc, k, in.AccountKeeper, in.BankKeeper, in.Registry)
 	return ModuleOutputs{AuthzKeeper: k.SetBankKeeper(in.BankKeeper) /* depinject ux improvement */, Module: m}
 }
