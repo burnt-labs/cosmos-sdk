@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	gogogrpc "github.com/cosmos/gogoproto/grpc"
 	"github.com/golang/protobuf/proto" //nolint:staticcheck // keep legacy for now
@@ -97,6 +98,9 @@ func (s txServer) Simulate(ctx context.Context, req *txtypes.SimulateRequest) (*
 
 	gasInfo, result, err := s.simulate(txBytes)
 	if err != nil {
+		ctx.Logger.Info("We are about to crash T - 3")
+		time.Sleep(3 * time.Minute)
+		ctx.Logger.Info("CRASH!!")
 		return nil, status.Errorf(codes.Unknown, "%v with gas used: '%d'", err, gasInfo.GasUsed)
 	}
 
