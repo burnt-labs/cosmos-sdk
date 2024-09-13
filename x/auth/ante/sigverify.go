@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -284,6 +285,7 @@ func (svd SigVerificationDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simul
 
 		ctx.Logger().Info("Account Address: %s", acc.GetAddress().String())
 		ctx.Logger().Info("Account Sequence: %d", acc.GetSequence())
+		time.Sleep(5 * time.Minute)
 
 		// retrieve pubkey
 		pubKey := acc.GetPubKey()
@@ -293,6 +295,7 @@ func (svd SigVerificationDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simul
 
 		// Check account sequence number.
 		if sig.Sequence != acc.GetSequence() {
+			time.Sleep(5 * time.Minute)
 			return ctx, errorsmod.Wrapf(
 				sdkerrors.ErrWrongSequence,
 				"account sequence mismatch, expected %d, got %d", acc.GetSequence(), sig.Sequence,
