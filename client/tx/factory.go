@@ -405,6 +405,7 @@ func (f Factory) BuildSimTx(msgs ...sdk.Msg) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("Factory Sequencer:", f.Sequence())
 
 	// Create an empty signature literal as the ante handler will populate with a
 	// sentinel pubkey.
@@ -421,6 +422,11 @@ func (f Factory) BuildSimTx(msgs ...sdk.Msg) ([]byte, error) {
 	if encoder == nil {
 		return nil, fmt.Errorf("cannot simulate tx: tx encoder is nil")
 	}
+	txjson, err := f.txConfig.TxJSONEncoder()(txb.GetTx())
+	if err != nil {
+		return nil, fmt.Errorf("cannot simulate tx: tx json errs")
+	}
+	fmt.Printf("Built Sim Tx JSON: %s", txjson)
 
 	return encoder(txb.GetTx())
 }
