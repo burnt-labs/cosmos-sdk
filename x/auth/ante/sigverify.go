@@ -273,11 +273,17 @@ func (svd SigVerificationDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simul
 		return ctx, errorsmod.Wrapf(sdkerrors.ErrUnauthorized, "invalid number of signer;  expected: %d, got %d", len(signers), len(sigs))
 	}
 
+	ctx.Logger().Info("Number of signatures: %d", len(sigs))
+
 	for i, sig := range sigs {
+		ctx.Logger().Info("sig[%d]:  %v", i, sig)
 		acc, err := GetSignerAcc(ctx, svd.ak, signers[i])
 		if err != nil {
 			return ctx, err
 		}
+
+		ctx.Logger().Info("Account Address: %s", acc.GetAddress().String())
+		ctx.Logger().Info("Account Sequence: %d", acc.GetSequence())
 
 		// retrieve pubkey
 		pubKey := acc.GetPubKey()
