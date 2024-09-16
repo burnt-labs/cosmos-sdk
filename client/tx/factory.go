@@ -3,6 +3,7 @@ package tx
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -405,7 +406,6 @@ func (f Factory) BuildSimTx(msgs ...sdk.Msg) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("Factory Sequencer:", f.Sequence())
 
 	// Create an empty signature literal as the ante handler will populate with a
 	// sentinel pubkey.
@@ -424,9 +424,9 @@ func (f Factory) BuildSimTx(msgs ...sdk.Msg) ([]byte, error) {
 	}
 	txjson, err := f.txConfig.TxJSONEncoder()(txb.GetTx())
 	if err != nil {
-		return nil, fmt.Errorf("cannot simulate tx: tx json errs")
+		return nil, fmt.Errorf("cannot simulate tx: tx json errs: %e", err)
 	}
-	fmt.Printf("Built Sim Tx JSON: %s", txjson)
+	log.Printf("Built Sim Tx JSON: %s", txjson)
 
 	return encoder(txb.GetTx())
 }
