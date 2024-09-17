@@ -411,7 +411,7 @@ func (f Factory) BuildSimTx(msgs ...sdk.Msg) ([]byte, error) {
 	sig := signing.SignatureV2{
 		PubKey:   pk,
 		Data:     f.getSimSignatureData(pk),
-		Sequence: f.Sequence(),
+		Sequence: 0,
 	}
 	if err := txb.SetSignatures(sig); err != nil {
 		return nil, err
