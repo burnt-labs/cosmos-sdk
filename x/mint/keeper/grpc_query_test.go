@@ -4,12 +4,11 @@ import (
 	gocontext "context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/mock/gomock"
 
 	"cosmossdk.io/log"
 	storetypes "cosmossdk.io/store/types"
-	authtypes "cosmossdk.io/x/auth/types"
 	"cosmossdk.io/x/mint"
 	"cosmossdk.io/x/mint/keeper"
 	minttestutil "cosmossdk.io/x/mint/testutil"
@@ -21,6 +20,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/testutil"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 )
 
 type MintTestSuite struct {
@@ -28,7 +28,7 @@ type MintTestSuite struct {
 
 	ctx         sdk.Context
 	queryClient types.QueryClient
-	mintKeeper  keeper.Keeper
+	mintKeeper  *keeper.Keeper
 }
 
 func (suite *MintTestSuite) SetupTest() {
@@ -42,14 +42,12 @@ func (suite *MintTestSuite) SetupTest() {
 	ctrl := gomock.NewController(suite.T())
 	accountKeeper := minttestutil.NewMockAccountKeeper(ctrl)
 	bankKeeper := minttestutil.NewMockBankKeeper(ctrl)
-	stakingKeeper := minttestutil.NewMockStakingKeeper(ctrl)
 
 	accountKeeper.EXPECT().GetModuleAddress("mint").Return(sdk.AccAddress{})
 
 	suite.mintKeeper = keeper.NewKeeper(
 		encCfg.Codec,
 		env,
-		stakingKeeper,
 		accountKeeper,
 		bankKeeper,
 		authtypes.FeeCollectorName,

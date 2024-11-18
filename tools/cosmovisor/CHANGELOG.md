@@ -36,6 +36,23 @@ Ref: https://keepachangelog.com/en/1.0.0/
 
 ## [Unreleased]
 
+## v1.7.0 - 2024-11-18
+
+### Features
+
+* [#21790](https://github.com/cosmos/cosmos-sdk/pull/21790) Add `add-batch-upgrade` command.
+* [#21972](https://github.com/cosmos/cosmos-sdk/pull/21972) Add `prepare-upgrade` command
+* [#21932](https://github.com/cosmos/cosmos-sdk/pull/21932) Add `cosmovisor show-upgrade-info` command to display the upgrade-info.json into stdout.
+
+### Improvements
+
+* [#21891](https://github.com/cosmos/cosmos-sdk/pull/21891) create `current` symlink as relative
+* [#21462](https://github.com/cosmos/cosmos-sdk/pull/21462) Pass `stdin` to binary.
+  
+### Bug Fixes
+
+* [#22528](https://github.com/cosmos/cosmos-sdk/pull/22528) Fix premature upgrades on restarting cosmovisor.
+
 ## v1.6.0 - 2024-08-12
 
 ## Improvements
@@ -75,7 +92,7 @@ Ref: https://keepachangelog.com/en/1.0.0/
 
 ### API Breaking Changes
 
-* [#13603](https://github.com/cosmos-sdk/pull/13603) Rename cosmovisor package to `cosmossdk.io/tools/cosmovisor`.
+* [#13603](https://github.com/cosmos/cosmos-sdk/pull/13603) Rename cosmovisor package to `cosmossdk.io/tools/cosmovisor`.
 
 ## v1.3.0 - 2022-09-11
 

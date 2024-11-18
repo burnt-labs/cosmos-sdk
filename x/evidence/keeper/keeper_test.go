@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/mock/gomock"
 
 	"cosmossdk.io/collections"
 	coreaddress "cosmossdk.io/core/address"
@@ -102,13 +102,16 @@ func (suite *KeeperTestSuite) SetupTest() {
 	stakingKeeper := evidencetestutil.NewMockStakingKeeper(ctrl)
 	slashingKeeper := evidencetestutil.NewMockSlashingKeeper(ctrl)
 	accountKeeper := evidencetestutil.NewMockAccountKeeper(ctrl)
+	ck := evidencetestutil.NewMockConsensusKeeper(ctrl)
 
 	evidenceKeeper := keeper.NewKeeper(
 		encCfg.Codec,
 		env,
 		stakingKeeper,
 		slashingKeeper,
+		ck,
 		address.NewBech32Codec("cosmos"),
+		address.NewBech32Codec("cosmosvalcons"),
 	)
 
 	suite.stakingKeeper = stakingKeeper

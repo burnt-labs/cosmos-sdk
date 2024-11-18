@@ -15,8 +15,10 @@ import (
 	upgradetypes "cosmossdk.io/x/upgrade/types"
 )
 
+var errUntestAble = errors.New("untestable")
+
 type fileWatcher struct {
-	deamonHome string
+	daemonHome string
 	filename   string // full path to a watched file
 	interval   time.Duration
 
@@ -53,7 +55,7 @@ func newUpgradeFileWatcher(cfg *Config) (*fileWatcher, error) {
 	}
 
 	return &fileWatcher{
-		deamonHome:    cfg.Home,
+		daemonHome:    cfg.Home,
 		currentBin:    bin,
 		filename:      filenameAbs,
 		interval:      cfg.PollInterval,
@@ -109,7 +111,32 @@ func (fw *fileWatcher) CheckUpdate(currentUpgrade upgradetypes.Plan) bool {
 
 	stat, err := os.Stat(fw.filename)
 	if err != nil {
-		// file doesn't exists
+		if os.IsNotExist(err) {
+			return false
+		} else {
+			panic(fmt.Errorf("failed to stat upgrade info file: %w", err))
+		}
+	}
+
+	// check https://github.com/cosmos/cosmos-sdk/issues/21086
+	// If new file is still empty, wait a small amount of time for write to complete
+	if stat.Size() == 0 {
+		for range 10 {
+			time.Sleep(2 * time.Millisecond)
+			stat, err = os.Stat(fw.filename)
+			if err != nil {
+				if os.IsNotExist(err) {
+					return false
+				} else {
+					panic(fmt.Errorf("failed to stat upgrade info file: %w", err))
+				}
+			}
+			if stat.Size() == 0 {
+				break
+			}
+		}
+	}
+	if stat.Size() == 0 {
 		return false
 	}
 
@@ -118,21 +145,14 @@ func (fw *fileWatcher) CheckUpdate(currentUpgrade upgradetypes.Plan) bool {
 		return false
 	}
 
-	// if fw.lastModTime.IsZero() { // check https://github.com/cosmos/cosmos-sdk/issues/21086
-	// 	// first initialization or daemon restart while upgrading-info.json exists.
-	// 	// it could be that it was just created and not fully written to disk.
-	// 	// wait tiniest bit of time to allow the file to be fully written.
-	// 	time.Sleep(2 * time.Millisecond)
-	// }
-
 	info, err := parseUpgradeInfoFile(fw.filename, fw.disableRecase)
 	if err != nil {
 		panic(fmt.Errorf("failed to parse upgrade info file: %w", err))
 	}
 
 	// file exist but too early in height
-	currentHeight, _ := fw.checkHeight()
-	if currentHeight != 0 && currentHeight < info.Height {
+	currentHeight, err := fw.checkHeight()
+	if (err != nil || currentHeight < info.Height) && !errors.Is(err, errUntestAble) { // ignore this check for tests
 		return false
 	}
 
@@ -164,10 +184,10 @@ func (fw *fileWatcher) CheckUpdate(currentUpgrade upgradetypes.Plan) bool {
 // checkHeight checks if the current block height
 func (fw *fileWatcher) checkHeight() (int64, error) {
 	if testing.Testing() { // we cannot test the command in the test environment
-		return 0, nil
+		return 0, errUntestAble
 	}
 
-	result, err := exec.Command(fw.currentBin, "status", "--home", fw.deamonHome).CombinedOutput() //nolint:gosec // we want to execute the status command
+	result, err := exec.Command(fw.currentBin, "status", "--home", fw.daemonHome).CombinedOutput() //nolint:gosec // we want to execute the status command
 	if err != nil {
 		return 0, err
 	}

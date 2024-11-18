@@ -14,7 +14,6 @@ import (
 	signingv1beta1 "cosmossdk.io/api/cosmos/tx/signing/v1beta1"
 	txv1beta1 "cosmossdk.io/api/cosmos/tx/v1beta1"
 	"cosmossdk.io/core/address"
-	authsign "cosmossdk.io/x/auth/signing"
 	"cosmossdk.io/x/tx/decode"
 
 	"github.com/cosmos/cosmos-sdk/client"
@@ -24,6 +23,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
+	authsign "github.com/cosmos/cosmos-sdk/x/auth/signing"
 )
 
 var (
@@ -112,7 +112,7 @@ var marshalOption = proto.MarshalOptions{
 func (w *builder) getTx() (*gogoTxWrapper, error) {
 	anyMsgs, err := msgsV1toAnyV2(w.msgs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to convert messages: %w", err)
 	}
 	body := &txv1beta1.TxBody{
 		Messages:                    anyMsgs,
@@ -136,12 +136,12 @@ func (w *builder) getTx() (*gogoTxWrapper, error) {
 
 	bodyBytes, err := marshalOption.Marshal(body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to marshal body: %w", err)
 	}
 
 	authInfoBytes, err := marshalOption.Marshal(authInfo)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to marshal auth info: %w", err)
 	}
 
 	txRawBytes, err := marshalOption.Marshal(&txv1beta1.TxRaw{
@@ -150,12 +150,12 @@ func (w *builder) getTx() (*gogoTxWrapper, error) {
 		Signatures:    w.signatures,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to marshal tx raw: %w", err)
 	}
 
 	decodedTx, err := w.decoder.Decode(txRawBytes)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to decode tx: %w", err)
 	}
 
 	return newWrapperFromDecodedTx(w.addressCodec, w.codec, decodedTx)

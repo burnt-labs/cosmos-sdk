@@ -93,7 +93,12 @@ jobs:
 
   sims-notify-success:
     needs:
-      [test-sim-multi-seed-short, test-sim-after-import, test-sim-import-export]
+      [
+        test-sim-multi-seed-short,
+        test-sim-after-import,
+        test-sim-import-export,
+        test-sim-deterministic,
+      ]
     runs-on: large-sdk-runner
     if: ${{ success() }}
     steps:
@@ -106,7 +111,7 @@ jobs:
 
       - name: Notify Slack on success
         if: ${{ steps.last_status.outputs.last_status == 'failure' }}
-        uses: rtCamp/action-slack-notify@v2.3.0
+        uses: rtCamp/action-slack-notify@v2.3.2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_CHANNEL: sdk-sims
@@ -120,12 +125,17 @@ jobs:
     permissions:
       contents: none
     needs:
-      [test-sim-multi-seed-short, test-sim-after-import, test-sim-import-export]
+      [
+        test-sim-multi-seed-short,
+        test-sim-after-import,
+        test-sim-import-export,
+        test-sim-deterministic,
+      ]
     runs-on: large-sdk-runner
     if: ${{ failure() }}
     steps:
       - name: Notify Slack on failure
-        uses: rtCamp/action-slack-notify@v2.3.0
+        uses: rtCamp/action-slack-notify@v2.3.2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_CHANNEL: sdk-sims

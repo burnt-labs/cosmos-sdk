@@ -39,11 +39,12 @@ type v2KeyChangesMap map[string][]string
 
 // list all the keys which are need to be modified in v2
 var v2KeyChanges = v2KeyChangesMap{
-	"min-retain-blocks": []string{"comet.min-retain-blocks"},
-	"index-events":      []string{"comet.index-events"},
-	"halt-height":       []string{"comet.halt-height"},
-	"halt-time":         []string{"comet.halt-time"},
-	"app-db-backend":    []string{"store.app-db-backend"},
+	"minimum-gas-prices": []string{"server.minimum-gas-prices"},
+	"min-retain-blocks":  []string{"comet.min-retain-blocks"},
+	"index-events":       []string{"comet.index-events"},
+	"halt-height":        []string{"comet.halt-height"},
+	"halt-time":          []string{"comet.halt-time"},
+	"app-db-backend":     []string{"store.app-db-backend"},
 	"pruning-keep-recent": []string{
 		"store.options.ss-pruning-option.keep-recent",
 		"store.options.sc-pruning-option.keep-recent",
@@ -54,6 +55,8 @@ var v2KeyChanges = v2KeyChangesMap{
 	},
 	"iavl-cache-size":       []string{"store.options.iavl-config.cache-size"},
 	"iavl-disable-fastnode": []string{"store.options.iavl-config.skip-fast-storage-upgrade"},
+	"telemetry.enabled":     []string{"telemetry.enable"},
+	"mempool.max-txs":       []string{"comet.mempool.max-txs"},
 	// Add other key mappings as needed
 }
 
@@ -73,7 +76,6 @@ func PlanBuilder(from *tomledit.Document, to, planType string, loadFn loadDestCo
 
 	diffs := DiffKeys(from, target)
 	for _, diff := range diffs {
-		diff := diff
 		kv := diff.KV
 
 		var step transform.Step

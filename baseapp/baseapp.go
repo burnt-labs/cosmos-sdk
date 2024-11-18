@@ -13,11 +13,12 @@ import (
 	abci "github.com/cometbft/cometbft/api/cometbft/abci/v1"
 	cmtproto "github.com/cometbft/cometbft/api/cometbft/types/v1"
 	"github.com/cometbft/cometbft/crypto/tmhash"
-	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/gogoproto/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"cosmossdk.io/core/header"
+	"cosmossdk.io/core/server"
+	corestore "cosmossdk.io/core/store"
 	errorsmod "cosmossdk.io/errors"
 	"cosmossdk.io/log"
 	"cosmossdk.io/store"
@@ -65,7 +66,7 @@ type BaseApp struct {
 	mu                sync.Mutex // mu protects the fields below.
 	logger            log.Logger
 	name              string                      // application name from abci.BlockInfo
-	db                dbm.DB                      // common DB backend
+	db                corestore.KVStoreWithBatch  // common DB backend
 	cms               storetypes.CommitMultiStore // Main (uncached) state
 	qms               storetypes.MultiStore       // Optional alternative multistore for querying only.
 	storeLoader       StoreLoader                 // function to handle store loading, may be overridden with SetStoreLoader()
@@ -89,6 +90,8 @@ type BaseApp struct {
 	verifyVoteExt      sdk.VerifyVoteExtensionHandler // ABCI VerifyVoteExtension handler
 	prepareCheckStater sdk.PrepareCheckStater         // logic to run during commit using the checkState
 	precommiter        sdk.Precommiter                // logic to run during commit using the deliverState
+	versionModifier    server.VersionModifier         // interface to get and set the app version
+	checkTxHandler     sdk.CheckTxHandler
 
 	addrPeerFilter sdk.PeerFilter // filter peers by address and port
 	idPeerFilter   sdk.PeerFilter // filter peers by node ID
@@ -194,7 +197,7 @@ type BaseApp struct {
 // variadic number of option functions, which act on the BaseApp to set
 // configuration choices.
 func NewBaseApp(
-	name string, logger log.Logger, db dbm.DB, txDecoder sdk.TxDecoder, options ...func(*BaseApp),
+	name string, logger log.Logger, db corestore.KVStoreWithBatch, txDecoder sdk.TxDecoder, options ...func(*BaseApp),
 ) *BaseApp {
 	app := &BaseApp{
 		logger:           logger.With(log.ModuleKey, "baseapp"),
@@ -254,18 +257,11 @@ func (app *BaseApp) Name() string {
 
 // AppVersion returns the application's protocol version.
 func (app *BaseApp) AppVersion(ctx context.Context) (uint64, error) {
-	if app.paramStore == nil {
-		return 0, errors.New("app.paramStore is nil")
+	if app.versionModifier == nil {
+		return 0, errors.New("app.versionModifier is nil")
 	}
 
-	cp, err := app.paramStore.Get(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get consensus params: %w", err)
-	}
-	if cp.Version == nil {
-		return 0, nil
-	}
-	return cp.Version.App, nil
+	return app.versionModifier.AppVersion(ctx)
 }
 
 // Version returns the application's version string.
@@ -401,7 +397,7 @@ func (app *BaseApp) LastCommitID() storetypes.CommitID {
 
 // LastBlockHeight returns the last committed block height.
 func (app *BaseApp) LastBlockHeight() int64 {
-	return app.cms.LastCommitID().Version
+	return app.cms.LatestVersion()
 }
 
 // ChainID returns the chainID of the app.
@@ -693,7 +689,6 @@ func (app *BaseApp) getContextForTx(mode execMode, txBytes []byte) sdk.Context {
 // a branched multi-store.
 func (app *BaseApp) cacheTxContext(ctx sdk.Context, txBytes []byte) (sdk.Context, storetypes.CacheMultiStore) {
 	ms := ctx.MultiStore()
-	// TODO: https://github.com/cosmos/cosmos-sdk/issues/2824
 	msCache := ms.CacheMultiStore()
 	if msCache.TracingEnabled() {
 		msCache = msCache.SetTracingContext(
@@ -711,7 +706,7 @@ func (app *BaseApp) cacheTxContext(ctx sdk.Context, txBytes []byte) (sdk.Context
 func (app *BaseApp) preBlock(req *abci.FinalizeBlockRequest) ([]abci.Event, error) {
 	var events []abci.Event
 	if app.preBlocker != nil {
-		ctx := app.finalizeBlockState.Context()
+		ctx := app.finalizeBlockState.Context().WithEventManager(sdk.NewEventManager())
 		if err := app.preBlocker(ctx, req); err != nil {
 			return nil, err
 		}
@@ -723,6 +718,15 @@ func (app *BaseApp) preBlock(req *abci.FinalizeBlockRequest) ([]abci.Event, erro
 		ctx = ctx.WithBlockGasMeter(gasMeter)
 		app.finalizeBlockState.SetContext(ctx)
 		events = ctx.EventManager().ABCIEvents()
+
+		// append PreBlock attributes to all events
+		for i, event := range events {
+			events[i].Attributes = append(
+				event.Attributes,
+				abci.EventAttribute{Key: "mode", Value: "PreBlock"},
+				abci.EventAttribute{Key: "event_index", Value: strconv.Itoa(i)},
+			)
+		}
 	}
 	return events, nil
 }
@@ -744,6 +748,7 @@ func (app *BaseApp) beginBlock(_ *abci.FinalizeBlockRequest) (sdk.BeginBlock, er
 			resp.Events[i].Attributes = append(
 				event.Attributes,
 				abci.EventAttribute{Key: "mode", Value: "BeginBlock"},
+				abci.EventAttribute{Key: "event_index", Value: strconv.Itoa(i)},
 			)
 		}
 
@@ -766,7 +771,7 @@ func (app *BaseApp) deliverTx(tx []byte) *abci.ExecTxResult {
 		telemetry.SetGauge(float32(gInfo.GasWanted), "tx", "gas", "wanted")
 	}()
 
-	gInfo, result, anteEvents, err := app.runTx(execModeFinalize, tx)
+	gInfo, result, anteEvents, err := app.runTx(execModeFinalize, tx, nil)
 	if err != nil {
 		resultStr = "failed"
 		resp = responseExecTxResultWithEvents(
@@ -806,6 +811,7 @@ func (app *BaseApp) endBlock(_ context.Context) (sdk.EndBlock, error) {
 			eb.Events[i].Attributes = append(
 				event.Attributes,
 				abci.EventAttribute{Key: "mode", Value: "EndBlock"},
+				abci.EventAttribute{Key: "event_index", Value: strconv.Itoa(i)},
 			)
 		}
 
@@ -827,7 +833,9 @@ type HasNestedMsgs interface {
 // Note, gas execution info is always returned. A reference to a Result is
 // returned if the tx does not run out of gas and if all the messages are valid
 // and execute successfully. An error is returned otherwise.
-func (app *BaseApp) runTx(mode execMode, txBytes []byte) (gInfo sdk.GasInfo, result *sdk.Result, anteEvents []abci.Event, err error) {
+// both txbytes and the decoded tx are passed to runTx to avoid the state machine encoding the tx and decoding the transaction twice
+// passing the decoded tx to runTX is optional, it will be decoded if the tx is nil
+func (app *BaseApp) runTx(mode execMode, txBytes []byte, tx sdk.Tx) (gInfo sdk.GasInfo, result *sdk.Result, anteEvents []abci.Event, err error) {
 	// NOTE: GasWanted should be returned by the AnteHandler. GasUsed is
 	// determined by the GasMeter. We need access to the context to get the gas
 	// meter, so we initialize upfront.
@@ -875,9 +883,12 @@ func (app *BaseApp) runTx(mode execMode, txBytes []byte) (gInfo sdk.GasInfo, res
 		defer consumeBlockGas()
 	}
 
-	tx, err := app.txDecoder(txBytes)
-	if err != nil {
-		return sdk.GasInfo{GasUsed: 0, GasWanted: 0}, nil, nil, sdkerrors.ErrTxDecode.Wrap(err.Error())
+	// if the transaction is not decoded, decode it here
+	if tx == nil {
+		tx, err = app.txDecoder(txBytes)
+		if err != nil {
+			return sdk.GasInfo{GasUsed: 0, GasWanted: 0}, nil, nil, sdkerrors.ErrTxDecode.Wrap(err.Error())
+		}
 	}
 
 	msgs := tx.GetMsgs()
@@ -1019,12 +1030,13 @@ func (app *BaseApp) runTx(mode execMode, txBytes []byte) (gInfo sdk.GasInfo, res
 func (app *BaseApp) runMsgs(ctx sdk.Context, msgs []sdk.Msg, reflectMsgs []protoreflect.Message, mode execMode) (*sdk.Result, error) {
 	events := sdk.EmptyEvents()
 	msgResponses := make([]*codectypes.Any, 0, len(msgs))
-
 	// NOTE: GasWanted is determined by the AnteHandler and GasUsed by the GasMeter.
 	for i, msg := range msgs {
 		if mode != execModeFinalize && mode != execModeSimulate {
 			break
 		}
+
+		start := telemetry.Now()
 
 		handler := app.msgServiceRouter.Handler(msg)
 		if handler == nil {
@@ -1065,6 +1077,8 @@ func (app *BaseApp) runMsgs(ctx sdk.Context, msgs []sdk.Msg, reflectMsgs []proto
 			}
 			msgResponses = append(msgResponses, msgResponse)
 		}
+
+		telemetry.MeasureSince(start, "tx", "msg", "processing_time", sdk.MsgTypeURL(msg))
 	}
 
 	data, err := makeABCIData(msgResponses)
@@ -1151,6 +1165,12 @@ func createEvents(cdc codec.Codec, events sdk.Events, msg sdk.Msg, reflectMsg pr
 		}
 	}
 
+	// append the event_index attribute to all events
+	msgEvent = msgEvent.AppendAttributes(sdk.NewAttribute("event_index", "0"))
+	for i, event := range events {
+		events[i] = event.AppendAttributes(sdk.NewAttribute("event_index", strconv.Itoa(i+1)))
+	}
+
 	return sdk.Events{msgEvent}.AppendEvents(events), nil
 }
 
@@ -1165,7 +1185,7 @@ func (app *BaseApp) PrepareProposalVerifyTx(tx sdk.Tx) ([]byte, error) {
 		return nil, err
 	}
 
-	_, _, _, err = app.runTx(execModePrepareProposal, bz)
+	_, _, _, err = app.runTx(execModePrepareProposal, bz, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -1184,7 +1204,7 @@ func (app *BaseApp) ProcessProposalVerifyTx(txBz []byte) (sdk.Tx, error) {
 		return nil, err
 	}
 
-	_, _, _, err = app.runTx(execModeProcessProposal, txBz)
+	_, _, _, err = app.runTx(execModeProcessProposal, txBz, tx)
 	if err != nil {
 		return nil, err
 	}
