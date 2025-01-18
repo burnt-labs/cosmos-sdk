@@ -23,7 +23,7 @@ func TestLegacyGRPCQueryTally(t *testing.T) {
 
 	var (
 		req    *v1beta1.QueryTallyResultRequest
-		expRes *v1beta1.QueryTallyResultResponse
+		express *v1beta1.QueryTallyResultResponse
 	)
 
 	testCases := []struct {
@@ -46,7 +46,7 @@ func TestLegacyGRPCQueryTally(t *testing.T) {
 
 				req = &v1beta1.QueryTallyResultRequest{ProposalId: proposal.Id}
 
-				expRes = &v1beta1.QueryTallyResultResponse{
+				express = &v1beta1.QueryTallyResultResponse{
 					Tally: v1beta1.TallyResult{
 						Yes:        math.NewInt(3 * 5 * 1000000),
 						No:         math.NewInt(0),
@@ -68,7 +68,7 @@ func TestLegacyGRPCQueryTally(t *testing.T) {
 
 			if testCase.expPass {
 				assert.NilError(t, err)
-				assert.Equal(t, expRes.String(), tally.String())
+				assert.Equal(t, express.String(), tally.String())
 			} else {
 				assert.ErrorContains(t, err, testCase.expErrMsg)
 				assert.Assert(t, tally == nil)
