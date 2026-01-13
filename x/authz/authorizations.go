@@ -38,3 +38,9 @@ type AcceptResponse struct {
 	// it must use the updated version and handle the update on the storage level.
 	Updated Authorization
 }
+
+// Accepter represents the interface that allows to replace with custom accepter logic
+// while dispatching actions.
+type Accepter interface {
+	Accept(ctx context.Context, msg sdk.Msg, auth Authorization) (AcceptResponse, error)
+}

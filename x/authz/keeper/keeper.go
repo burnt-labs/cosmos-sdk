@@ -35,6 +35,7 @@ type Keeper struct {
 	router       baseapp.MessageRouter
 	authKeeper   authz.AccountKeeper
 	bankKeeper   authz.BankKeeper
+	accepter     authz.Accepter
 }
 
 // NewKeeper constructs a message authorization Keeper
@@ -51,6 +52,12 @@ func NewKeeper(storeService corestoretypes.KVStoreService, cdc codec.Codec, rout
 // DO NOT USE.
 func (k Keeper) SetBankKeeper(bk authz.BankKeeper) Keeper {
 	k.bankKeeper = bk
+	return k
+}
+
+// WithAccepter sets the accepter for the keeper.
+func (k Keeper) WithAccepter(accepter authz.Accepter) Keeper {
+	k.accepter = accepter
 	return k
 }
 
@@ -138,7 +145,13 @@ func (k Keeper) DispatchActions(ctx context.Context, grantee sdk.AccAddress, msg
 				return nil, err
 			}
 
-			resp, err := authorization.Accept(sdkCtx, msg)
+			var resp authz.AcceptResponse
+			// use the accepter if it is set or fallback to the authorization
+			if k.accepter != nil {
+				resp, err = k.accepter.Accept(sdkCtx, msg, authorization)
+			} else {
+				resp, err = authorization.Accept(sdkCtx, msg)
+			}
 			if err != nil {
 				return nil, err
 			}
