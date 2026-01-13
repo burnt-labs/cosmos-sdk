@@ -1,15 +1,15 @@
 package types
 
 import (
-	"context"
+	context "context"
 
-	"cosmossdk.io/core/appmodule"
+	"github.com/cosmos/cosmos-sdk/types/module"
 )
 
 // UpgradeHandler specifies the type of function that is called when an upgrade
 // is applied.
 //
-// `fromVM` is a VersionMap of moduleName to fromVersion (unit64), where
+// `fromVM` is a VersionMap of moduleName to fromVersion (uint64), where
 // fromVersion denotes the version from which we should migrate the module, the
 // target version being the module's latest version in the return VersionMap,
 // let's call it `toVM`.
@@ -24,4 +24,4 @@ import (
 // function.
 //
 // Please also refer to docs/core/upgrade.md for more information.
-type UpgradeHandler func(ctx context.Context, plan Plan, fromVM appmodule.VersionMap) (appmodule.VersionMap, error)
+type UpgradeHandler func(ctx context.Context, plan Plan, fromVM module.VersionMap) (module.VersionMap, error)

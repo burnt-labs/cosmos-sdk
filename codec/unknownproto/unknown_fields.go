@@ -40,11 +40,30 @@ func RejectUnknownFieldsStrict(bz []byte, msg proto.Message, resolver jsonpb.Any
 // This function traverses inside of messages nested via google.protobuf.Any. It does not do any deserialization of the proto.Message.
 // An AnyResolver must be provided for traversing inside google.protobuf.Any's.
 func RejectUnknownFields(bz []byte, msg proto.Message, allowUnknownNonCriticals bool, resolver jsonpb.AnyResolver) (hasUnknownNonCriticals bool, err error) {
+	// recursion limit with same default as https://github.com/protocolbuffers/protobuf-go/blob/v1.35.2/encoding/protowire/wire.go#L28
+	return doRejectUnknownFields(bz, msg, allowUnknownNonCriticals, resolver, 10_000)
+}
+
+func doRejectUnknownFields(
+	bz []byte,
+	msg proto.Message,
+	allowUnknownNonCriticals bool,
+	resolver jsonpb.AnyResolver,
+	recursionLimit int,
+) (hasUnknownNonCriticals bool, err error) {
 	if len(bz) == 0 {
 		return hasUnknownNonCriticals, nil
 	}
+	if recursionLimit == 0 {
+		return false, errors.New("recursion limit reached")
+	}
 
-	fieldDescProtoFromTagNum, _, err := getDescriptorInfo(msg)
+	desc, ok := msg.(descriptorIface)
+	if !ok {
+		return hasUnknownNonCriticals, fmt.Errorf("%T does not have a Descriptor() method", msg)
+	}
+
+	fieldDescProtoFromTagNum, _, err := getDescriptorInfo(desc, msg)
 	if err != nil {
 		return hasUnknownNonCriticals, err
 	}
@@ -125,7 +144,7 @@ func RejectUnknownFields(bz []byte, msg proto.Message, allowUnknownNonCriticals 
 
 		if protoMessageName == ".google.protobuf.Any" {
 			// Firstly typecheck types.Any to ensure nothing snuck in.
-			hasUnknownNonCriticalsChild, err := RejectUnknownFields(fieldBytes, (*types.Any)(nil), allowUnknownNonCriticals, resolver)
+			hasUnknownNonCriticalsChild, err := doRejectUnknownFields(fieldBytes, (*types.Any)(nil), allowUnknownNonCriticals, resolver, recursionLimit-1)
 			hasUnknownNonCriticals = hasUnknownNonCriticals || hasUnknownNonCriticalsChild
 			if err != nil {
 				return hasUnknownNonCriticals, err
@@ -148,7 +167,7 @@ func RejectUnknownFields(bz []byte, msg proto.Message, allowUnknownNonCriticals 
 			}
 		}
 
-		hasUnknownNonCriticalsChild, err := RejectUnknownFields(fieldBytes, msg, allowUnknownNonCriticals, resolver)
+		hasUnknownNonCriticalsChild, err := doRejectUnknownFields(fieldBytes, msg, allowUnknownNonCriticals, resolver, recursionLimit-1)
 		hasUnknownNonCriticals = hasUnknownNonCriticals || hasUnknownNonCriticalsChild
 		if err != nil {
 			return hasUnknownNonCriticals, err
@@ -222,7 +241,7 @@ var checks = [...]map[descriptorpb.FieldDescriptorProto_Type]bool{
 		descriptorpb.FieldDescriptorProto_TYPE_MESSAGE: true,
 		// The following types can be packed repeated.
 		// ref: "Only repeated fields of primitive numeric types (types which use the varint, 32-bit, or 64-bit wire types) can be declared "packed"."
-		// ref: https://protobuf.dev/programming-guides/encoding/#packed
+		// ref: https://developers.google.com/protocol-buffers/docs/encoding#packed
 		descriptorpb.FieldDescriptorProto_TYPE_INT32:    true,
 		descriptorpb.FieldDescriptorProto_TYPE_INT64:    true,
 		descriptorpb.FieldDescriptorProto_TYPE_UINT32:   true,
@@ -255,7 +274,7 @@ var checks = [...]map[descriptorpb.FieldDescriptorProto_Type]bool{
 }
 
 // canEncodeType returns true if the wireType is suitable for encoding the descriptor type.
-// See https://protobuf.dev/programming-guides/encoding/#structure.
+// See https://developers.google.com/protocol-buffers/docs/encoding#structure.
 func canEncodeType(wireType protowire.Type, descType descriptorpb.FieldDescriptorProto_Type) bool {
 	if iwt := int(wireType); iwt < 0 || iwt >= len(checks) {
 		return false
@@ -340,11 +359,7 @@ func unnestDesc(mdescs []*descriptorpb.DescriptorProto, indices []int) *descript
 
 // Invoking descriptorpb.ForMessage(proto.Message.(Descriptor).Descriptor()) is incredibly slow
 // for every single message, thus the need for a hand-rolled custom version that's performant and cacheable.
-func extractFileDescMessageDesc(msg proto.Message) (*descriptorpb.FileDescriptorProto, *descriptorpb.DescriptorProto, error) {
-	desc, ok := msg.(descriptorIface)
-	if !ok {
-		return nil, nil, fmt.Errorf("%T does not have a Descriptor() method", msg)
-	}
+func extractFileDescMessageDesc(desc descriptorIface) (*descriptorpb.FileDescriptorProto, *descriptorpb.DescriptorProto, error) {
 	gzippedPb, indices := desc.Descriptor()
 
 	protoFileToDescMu.RLock()
@@ -390,8 +405,7 @@ var (
 )
 
 // getDescriptorInfo retrieves the mapping of field numbers to their respective field descriptors.
-func getDescriptorInfo(msg proto.Message) (map[int32]*descriptorpb.FieldDescriptorProto, *descriptorpb.DescriptorProto, error) {
-	// we immediately check if the desc is present in the desc
+func getDescriptorInfo(desc descriptorIface, msg proto.Message) (map[int32]*descriptorpb.FieldDescriptorProto, *descriptorpb.DescriptorProto, error) {
 	key := reflect.ValueOf(msg).Type()
 
 	descprotoCacheMu.RLock()
@@ -403,7 +417,7 @@ func getDescriptorInfo(msg proto.Message) (map[int32]*descriptorpb.FieldDescript
 	}
 
 	// Now compute and cache the index.
-	_, md, err := extractFileDescMessageDesc(msg)
+	_, md, err := extractFileDescMessageDesc(desc)
 	if err != nil {
 		return nil, nil, err
 	}

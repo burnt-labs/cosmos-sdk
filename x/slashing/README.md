@@ -62,7 +62,7 @@ In order to mitigate the impact of initially likely categories of non-malicious
 protocol faults, the Cosmos Hub implements for each validator
 a _tombstone_ cap, which only allows a validator to be slashed once for a double
 sign fault. For example, if you misconfigure your HSM and double-sign a bunch of
-old blocks, you'll only be punished for the first double-sign (and then immediately tombstombed). This will still be quite expensive and desirable to avoid, but tombstone caps
+old blocks, you'll only be punished for the first double-sign (and then immediately tombstoned). This will still be quite expensive and desirable to avoid, but tombstone caps
 somewhat blunt the economic impact of unintentional misconfiguration.
 
 Liveness faults do not have caps, as they can't stack upon each other. Liveness bugs are "detected" as soon as the infraction occurs, and the validators are immediately put in jail, so it is not possible for them to commit multiple liveness faults without unjailing in between.
@@ -143,7 +143,7 @@ bonded validator. The `SignedBlocksWindow` parameter defines the size
 The information stored for tracking validator liveness is as follows:
 
 ```protobuf reference
-https://github.com/cosmos/cosmos-sdk/blob/v0.52.0-beta.1/x/slashing/proto/cosmos/slashing/v1beta1/slashing.proto#L13-L35
+https://github.com/cosmos/cosmos-sdk/blob/v0.47.0-rc1/proto/cosmos/slashing/v1beta1/slashing.proto#L13-L35
 ```
 
 ### Params
@@ -154,7 +154,7 @@ it can be updated with governance or the address with authority.
 * Params: `0x00 | ProtocolBuffer(Params)`
 
 ```protobuf reference
-https://github.com/cosmos/cosmos-sdk/blob/v0.52.0-beta.1/x/slashing/proto/cosmos/slashing/v1beta1/slashing.proto#L37-L62
+https://github.com/cosmos/cosmos-sdk/blob/v0.47.0-rc1/proto/cosmos/slashing/v1beta1/slashing.proto#L37-L59
 ```
 
 ## Messages
@@ -212,11 +212,10 @@ provisions and rewards.
 At the beginning of each block, we update the `ValidatorSigningInfo` for each
 validator and check if they've crossed below the liveness threshold over a
 sliding window. This sliding window is defined by `SignedBlocksWindow` and the
-index in this window is determined by (`height - SignInfo.StartHeight`).
-Notice that the position in the sliding window is incremented every block,
-independent of whether the validator signed or not.
-Once the index is determined, the `MissedBlocksBitArray` and
-`MissedBlocksCounter` are updated accordingly.
+index in this window is determined by `IndexOffset` found in the validator's
+`ValidatorSigningInfo`. For each block processed, the `IndexOffset` is incremented
+regardless if the validator signed or not. Once the index is determined, the
+`MissedBlocksBitArray` and `MissedBlocksCounter` are updated accordingly.
 
 Finally, in order to determine if a validator crosses below the liveness threshold,
 we fetch the maximum number of blocks missed, `maxMissed`, which is
@@ -227,7 +226,7 @@ greater than `minHeight` and the validator's `MissedBlocksCounter` is greater th
 for `DowntimeJailDuration`, and have the following values reset:
 `MissedBlocksBitArray`, `MissedBlocksCounter`, and `IndexOffset`.
 
-**Note**: Liveness slashes do **NOT** lead to a tombstombing.
+**Note**: Liveness slashes do **NOT** lead to a tombstoning.
 
 ```go
 height := block.Height
@@ -235,9 +234,11 @@ height := block.Height
 for vote in block.LastCommitInfo.Votes {
   signInfo := GetValidatorSigningInfo(vote.Validator.Address)
 
-  // This is a relative index, so we counts blocks the validator SHOULD have
-  // signed. We use the 0-value default signing info if not present.
-  index := (height - signInfo.StartHeight) % SignedBlocksWindow()
+  // This is a relative index, so we count blocks the validator SHOULD have
+  // signed. We use the 0-value default signing info if not present, except for
+  // start height.
+  index := signInfo.IndexOffset % SignedBlocksWindow()
+  signInfo.IndexOffset++
 
   // Update MissedBlocksBitArray and MissedBlocksCounter. The MissedBlocksCounter
   // just tracks the sum of MissedBlocksBitArray. That way we avoid needing to
@@ -312,7 +313,6 @@ The following hooks impact the slashing state:
 * `AfterValidatorBonded` creates a `ValidatorSigningInfo` instance as described in the following section.
 * `AfterValidatorCreated` stores a validator's consensus key.
 * `AfterValidatorRemoved` removes a validator's consensus key.
-* `AfterConsensusPubKeyUpdate` handles the rotation of signing info and updates the address-pubkey relation after a consensus key update.
 
 ### Validator Bonded
 
@@ -331,7 +331,7 @@ onValidatorBonded(address sdk.ValAddress)
       IndexOffset         : 0,
       JailedUntil         : time.Unix(0, 0),
       Tombstone           : false,
-      MissedBloskCounter  : 0
+      MissedBlockCounter  : 0
     } else {
       signingInfo.StartHeight = CurrentHeight
     }
@@ -632,20 +632,6 @@ Example:
 
 ```bash
 simd tx slashing unjail --from mykey
-```
-
-#### update-params-proposal
-
-The `update-params-proposal` command allows users to submit a governance proposal to update the slashing module parameters:
-
-```bash
-simd tx slashing update-params-proposal <params> [flags]
-```
-
-Example:
-
-```bash
-simd tx slashing update-params-proposal '{ "signed_blocks_window": "100" }'
 ```
 
 ### gRPC

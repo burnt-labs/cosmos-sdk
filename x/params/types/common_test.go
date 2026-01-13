@@ -6,7 +6,8 @@ import (
 	"time"
 
 	storetypes "cosmossdk.io/store/types"
-	"cosmossdk.io/x/params/types"
+
+	"github.com/cosmos/cosmos-sdk/x/params/types"
 )
 
 var (
@@ -32,20 +33,20 @@ type paramsV2 struct {
 	MaxRedelegationEntries uint32        `json:"max_redelegation_entries" yaml:"max_redelegation_entries"`
 }
 
-func validateUnbondingTime(i interface{}) error {
+func validateUnbondingTime(i any) error {
 	v, ok := i.(time.Duration)
 	if !ok {
 		return fmt.Errorf("invalid parameter type: %T", i)
 	}
 
 	if v < (24 * time.Hour) {
-		return errors.New("unbonding time must be at least one day")
+		return fmt.Errorf("unbonding time must be at least one day")
 	}
 
 	return nil
 }
 
-func validateMaxValidators(i interface{}) error {
+func validateMaxValidators(i any) error {
 	_, ok := i.(uint16)
 	if !ok {
 		return fmt.Errorf("invalid parameter type: %T", i)
@@ -54,7 +55,7 @@ func validateMaxValidators(i interface{}) error {
 	return nil
 }
 
-func validateBondDenom(i interface{}) error {
+func validateBondDenom(i any) error {
 	v, ok := i.(string)
 	if !ok {
 		return fmt.Errorf("invalid parameter type: %T", i)
@@ -67,7 +68,7 @@ func validateBondDenom(i interface{}) error {
 	return nil
 }
 
-func validateMaxRedelegationEntries(i interface{}) error {
+func validateMaxRedelegationEntries(i any) error {
 	_, ok := i.(uint32)
 	if !ok {
 		return fmt.Errorf("invalid parameter type: %T", i)
@@ -78,18 +79,18 @@ func validateMaxRedelegationEntries(i interface{}) error {
 
 func (p *params) ParamSetPairs() types.ParamSetPairs {
 	return types.ParamSetPairs{
-		types.ParamSetPair{Key: keyUnbondingTime, Value: &p.UnbondingTime, ValidatorFn: validateUnbondingTime},
-		types.ParamSetPair{Key: keyMaxValidators, Value: &p.MaxValidators, ValidatorFn: validateMaxValidators},
-		types.ParamSetPair{Key: keyBondDenom, Value: &p.BondDenom, ValidatorFn: validateBondDenom},
+		{keyUnbondingTime, &p.UnbondingTime, validateUnbondingTime},
+		{keyMaxValidators, &p.MaxValidators, validateMaxValidators},
+		{keyBondDenom, &p.BondDenom, validateBondDenom},
 	}
 }
 
 func (p *paramsV2) ParamSetPairs() types.ParamSetPairs {
 	return types.ParamSetPairs{
-		types.ParamSetPair{Key: keyUnbondingTime, Value: &p.UnbondingTime, ValidatorFn: validateUnbondingTime},
-		types.ParamSetPair{Key: keyMaxValidators, Value: &p.MaxValidators, ValidatorFn: validateMaxValidators},
-		types.ParamSetPair{Key: keyBondDenom, Value: &p.BondDenom, ValidatorFn: validateBondDenom},
-		types.ParamSetPair{Key: keyMaxRedelegationEntries, Value: &p.MaxRedelegationEntries, ValidatorFn: validateMaxRedelegationEntries},
+		{keyUnbondingTime, &p.UnbondingTime, validateUnbondingTime},
+		{keyMaxValidators, &p.MaxValidators, validateMaxValidators},
+		{keyBondDenom, &p.BondDenom, validateBondDenom},
+		{keyMaxRedelegationEntries, &p.MaxRedelegationEntries, validateMaxRedelegationEntries},
 	}
 }
 

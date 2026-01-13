@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -18,7 +17,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+	"github.com/cosmos/cosmos-sdk/types/errors"
 	"github.com/cosmos/cosmos-sdk/version"
 )
 
@@ -120,7 +119,7 @@ $ %[1]s tx [flags] | %[1]s q wait-tx
 				return err
 			}
 
-			c, err := rpchttp.New(clientCtx.NodeURI)
+			c, err := rpchttp.New(clientCtx.NodeURI, "/websocket")
 			if err != nil {
 				return err
 			}
@@ -188,7 +187,7 @@ $ %[1]s tx [flags] | %[1]s q wait-tx
 					return clientCtx.PrintProto(newResponseFormatBroadcastTxCommit(res))
 				}
 			case <-ctx.Done():
-				return sdkerrors.ErrLogic.Wrapf("timed out waiting for transaction %X to be included in a block", hash)
+				return errors.ErrLogic.Wrapf("timed out waiting for transaction %X to be included in a block", hash)
 			}
 			return nil
 		},
@@ -223,5 +222,5 @@ func parseHashFromInput(in []byte) ([]byte, error) {
 			return hex.DecodeString(hash)
 		}
 	}
-	return nil, errors.New("txhash not found")
+	return nil, fmt.Errorf("txhash not found")
 }

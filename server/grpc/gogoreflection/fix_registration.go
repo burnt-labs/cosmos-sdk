@@ -4,13 +4,13 @@ import (
 	"reflect"
 
 	_ "github.com/cosmos/cosmos-proto"        // look above
-	_ "github.com/cosmos/gogoproto/gogoproto" // required so it does register the gogoproto file descriptor
+	_ "github.com/cosmos/gogoproto/gogoproto" // required so it registers the gogoproto file descriptor
 	gogoproto "github.com/cosmos/gogoproto/proto"
 	"github.com/golang/protobuf/proto" //nolint:staticcheck // migrate in a future pr
 )
 
 func getFileDescriptor(filePath string) []byte {
-	// Since we got well known descriptors which are not registered into gogoproto
+	// Since we have well known descriptors which are not registered into gogoproto
 	// registry but are instead registered into the proto one, we need to check both.
 	fd := gogoproto.FileDescriptor(filePath)
 	if len(fd) != 0 {
@@ -37,16 +37,16 @@ func getExtension(extID int32, m proto.Message) *gogoproto.ExtensionDesc {
 		}
 	}
 
-	// check into proto registry
+	// check in the proto registry
 	for id, desc := range proto.RegisteredExtensions(m) { //nolint:staticcheck // keep for backward compatibility
 		if id == extID {
 			return &gogoproto.ExtensionDesc{
-				ExtendedType:  desc.ExtendedType,
-				ExtensionType: desc.ExtensionType,
-				Field:         desc.Field,
-				Name:          desc.Name,
-				Tag:           desc.Tag,
-				Filename:      desc.Filename,
+				ExtendedType:  desc.ExtendedType,  //nolint:staticcheck // keep for backward compatibility
+				ExtensionType: desc.ExtensionType, //nolint:staticcheck // keep for backward compatibility
+				Field:         desc.Field,         //nolint:staticcheck // keep for backward compatibility
+				Name:          desc.Name,          //nolint:staticcheck // keep for backward compatibility
+				Tag:           desc.Tag,           //nolint:staticcheck // keep for backward compatibility
+				Filename:      desc.Filename,      //nolint:staticcheck // keep for backward compatibility
 			}
 		}
 	}

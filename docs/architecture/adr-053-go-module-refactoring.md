@@ -23,7 +23,7 @@ increase which technically creates a new go module
 (with a v2, v3, etc. suffix).
 
 [Keeping modules API compatible](https://go.dev/blog/module-compatibility) in
-this way requires a fair amount of fair thought and discipline.
+this way requires a fair amount of thought and discipline.
 
 The Cosmos SDK is a fairly large project which originated before go modules
 came into existence and has always been under a v0.x release even though
@@ -70,7 +70,7 @@ clear improvements to be made or to remove legacy dependencies (for instance on
 amino or gogo proto), as long the old package attempts
 to avoid API breakage with aliases and wrappers
 * care should be taken when simply trying to turn an existing package into a
-new go module: https://go.dev/wiki/Modules#is-it-possible-to-add-a-module-to-a-multi-module-repository.
+new go module: https://github.com/golang/go/wiki/Modules#is-it-possible-to-add-a-module-to-a-multi-module-repository.
 In general, it seems safer to just create a new module path (appending v2, v3, etc.
 if necessary), rather than trying to make an old package a new module.
 
@@ -96,7 +96,7 @@ per-project, although most of these will hopefully be indirect
 
 ## Further Discussions
 
-Further discussions are occurring in primarily in
+Further discussions are occurring primarily in
 https://github.com/cosmos/cosmos-sdk/discussions/10582 and within
 the Cosmos SDK Framework Working Group.
 

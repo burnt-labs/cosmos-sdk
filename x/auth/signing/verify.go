@@ -2,7 +2,6 @@ package signing
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 
 	signingv1beta1 "cosmossdk.io/api/cosmos/tx/signing/v1beta1"
@@ -79,7 +78,7 @@ func VerifySignature(
 			return err
 		}
 		if !pubKey.VerifySignature(signBytes, data.Signature) {
-			return fmt.Errorf("unable to verify single signer signature '%s' for signBytes '%s'", hex.EncodeToString(data.Signature), hex.EncodeToString(signBytes))
+			return fmt.Errorf("unable to verify single signer signature")
 		}
 		return nil
 

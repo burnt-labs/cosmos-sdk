@@ -12,14 +12,12 @@ import (
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 
-	"cosmossdk.io/core/address"
-	"cosmossdk.io/x/gov/types"
-
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	"github.com/cosmos/cosmos-sdk/x/gov/types"
 )
 
 const (
@@ -36,7 +34,7 @@ var suggestedProposalTypes = []proposalType{
 	},
 	{
 		Name:    "community-pool-spend",
-		MsgType: "/cosmos.protocolpool.v1.MsgCommunityPoolSpend",
+		MsgType: "/cosmos.distribution.v1beta1.MsgCommunityPoolSpend",
 	},
 	{
 		Name:    "software-upgrade",
@@ -45,14 +43,6 @@ var suggestedProposalTypes = []proposalType{
 	{
 		Name:    "cancel-software-upgrade",
 		MsgType: "/cosmos.upgrade.v1beta1.MsgCancelUpgrade",
-	},
-	{
-		Name:    "submit-budget-proposal",
-		MsgType: "/cosmos.protocolpool.v1.MsgSubmitBudgetProposal",
-	},
-	{
-		Name:    "create-continuous-fund",
-		MsgType: "/cosmos.protocolpool.v1.MsgCreateContinuousFund",
 	},
 	{
 		Name:    proposalOther,
@@ -65,7 +55,7 @@ var suggestedProposalTypes = []proposalType{
 // namePrefix is the name to be displayed as "Enter <namePrefix> <field>"
 // TODO: when bringing this in autocli, use proto message instead
 // this will simplify the get address logic
-func Prompt[T any](data T, namePrefix string, addressCodec address.Codec) (T, error) {
+func Prompt[T any](data T, namePrefix string) (T, error) {
 	v := reflect.ValueOf(&data).Elem()
 	if v.Kind() == reflect.Interface {
 		v = reflect.ValueOf(data)
@@ -74,8 +64,8 @@ func Prompt[T any](data T, namePrefix string, addressCodec address.Codec) (T, er
 		}
 	}
 
-	for i := 0; i < v.NumField(); i++ {
-		// if the field is a struct skip or not slice of string or int then skip
+	for i := range v.NumField() {
+		// if the field is a struct skip or not a slice of string or int then skip
 		switch v.Field(i).Kind() {
 		case reflect.Struct:
 			// TODO(@julienrbrt) in the future we can add a recursive call to Prompt
@@ -96,11 +86,7 @@ func Prompt[T any](data T, namePrefix string, addressCodec address.Codec) (T, er
 
 		if strings.EqualFold(fieldName, "authority") {
 			// pre-fill with gov address
-			defaultAddr, err := addressCodec.BytesToString(authtypes.NewModuleAddress(types.ModuleName))
-			if err != nil {
-				return data, err
-			}
-			prompt.Default = defaultAddr
+			prompt.Default = authtypes.NewModuleAddress(types.ModuleName).String()
 			prompt.Validate = client.ValidatePromptAddress
 		}
 
@@ -163,8 +149,8 @@ type proposalType struct {
 }
 
 // Prompt the proposal type values and return the proposal and its metadata
-func (p *proposalType) Prompt(cdc codec.Codec, skipMetadata bool, addressCodec address.Codec) (*proposal, types.ProposalMetadata, error) {
-	metadata, err := PromptMetadata(skipMetadata, addressCodec)
+func (p *proposalType) Prompt(cdc codec.Codec, skipMetadata bool) (*proposal, types.ProposalMetadata, error) {
+	metadata, err := PromptMetadata(skipMetadata)
 	if err != nil {
 		return nil, metadata, fmt.Errorf("failed to set proposal metadata: %w", err)
 	}
@@ -190,7 +176,7 @@ func (p *proposalType) Prompt(cdc codec.Codec, skipMetadata bool, addressCodec a
 	}
 
 	// set messages field
-	result, err := Prompt(p.Msg, "msg", addressCodec)
+	result, err := Prompt(p.Msg, "msg")
 	if err != nil {
 		return nil, metadata, fmt.Errorf("failed to set proposal message: %w", err)
 	}
@@ -214,9 +200,9 @@ func getProposalSuggestions() []string {
 }
 
 // PromptMetadata prompts for proposal metadata or only title and summary if skip is true
-func PromptMetadata(skip bool, addressCodec address.Codec) (types.ProposalMetadata, error) {
+func PromptMetadata(skip bool) (types.ProposalMetadata, error) {
 	if !skip {
-		metadata, err := Prompt(types.ProposalMetadata{}, "proposal", addressCodec)
+		metadata, err := Prompt(types.ProposalMetadata{}, "proposal")
 		if err != nil {
 			return metadata, fmt.Errorf("failed to set proposal metadata: %w", err)
 		}
@@ -311,7 +297,7 @@ func NewCmdDraftProposal() *cobra.Command {
 
 			skipMetadataPrompt, _ := cmd.Flags().GetBool(flagSkipMetadata)
 
-			result, metadata, err := proposal.Prompt(clientCtx.Codec, skipMetadataPrompt, clientCtx.AddressCodec)
+			result, metadata, err := proposal.Prompt(clientCtx.Codec, skipMetadataPrompt)
 			if err != nil {
 				return err
 			}

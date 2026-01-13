@@ -17,7 +17,7 @@ type uintTestSuite struct {
 	suite.Suite
 }
 
-func TestUnitTestSuite(t *testing.T) {
+func TestUintTestSuite(t *testing.T) {
 	suite.Run(t, new(uintTestSuite))
 }
 
@@ -136,8 +136,8 @@ func (s *uintTestSuite) TestArithUint() {
 			{u1.AddUint64(n2), n1 + n2},
 			{u1.MulUint64(n2), n1 * n2},
 			{u1.QuoUint64(n2), n1 / n2},
-			{sdkmath.MinUint(u1, u2), minuint(n1, n2)},
-			{sdkmath.MaxUint(u1, u2), maxuint(n1, n2)},
+			{sdkmath.MinUint(u1, u2), min(n1, n2)},
+			{sdkmath.MaxUint(u1, u2), max(n1, n2)},
 			{u1.Incr(), n1 + 1},
 		}
 
@@ -316,20 +316,6 @@ func (s *uintTestSuite) TestRelativePow() {
 	}
 }
 
-func minuint(i1, i2 uint64) uint64 {
-	if i1 < i2 {
-		return i1
-	}
-	return i2
-}
-
-func maxuint(i1, i2 uint64) uint64 {
-	if i1 > i2 {
-		return i1
-	}
-	return i2
-}
-
 func TestRoundTripMarshalToUint(t *testing.T) {
 	values := []uint64{
 		0,
@@ -343,7 +329,6 @@ func TestRoundTripMarshalToUint(t *testing.T) {
 	}
 
 	for _, value := range values {
-		value := value
 		t.Run(fmt.Sprintf("%d", value), func(t *testing.T) {
 			t.Parallel()
 

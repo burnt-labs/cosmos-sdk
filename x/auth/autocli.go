@@ -5,8 +5,8 @@ import (
 
 	authv1beta1 "cosmossdk.io/api/cosmos/auth/v1beta1"
 	autocliv1 "cosmossdk.io/api/cosmos/autocli/v1"
-	_ "cosmossdk.io/api/cosmos/crypto/secp256k1" // register to that it shows up in protoregistry.GlobalTypes
-	_ "cosmossdk.io/api/cosmos/crypto/secp256r1" // register to that it shows up in protoregistry.GlobalTypes
+	_ "cosmossdk.io/api/cosmos/crypto/secp256k1" // register so that it shows up in protoregistry.GlobalTypes
+	_ "cosmossdk.io/api/cosmos/crypto/secp256r1" // register so that it shows up in protoregistry.GlobalTypes
 
 	"github.com/cosmos/cosmos-sdk/version"
 )
@@ -24,19 +24,19 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 				},
 				{
 					RpcMethod:      "Account",
-					Use:            "account <address>",
+					Use:            "account [address]",
 					Short:          "Query account by address",
 					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "address"}},
 				},
 				{
 					RpcMethod:      "AccountInfo",
-					Use:            "account-info <address>",
+					Use:            "account-info [address]",
 					Short:          "Query account info which is common to all account types.",
 					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "address"}},
 				},
 				{
 					RpcMethod:      "AccountAddressByID",
-					Use:            "address-by-acc-num <acc-num>",
+					Use:            "address-by-acc-num [acc-num]",
 					Short:          "Query account address by account number",
 					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "account_id"}},
 				},
@@ -47,20 +47,20 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 				},
 				{
 					RpcMethod:      "ModuleAccountByName",
-					Use:            "module-account <module-name>",
+					Use:            "module-account [module-name]",
 					Short:          "Query module account info by module name",
 					Example:        fmt.Sprintf("%s q auth module-account gov", version.AppName),
 					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "name"}},
 				},
 				{
 					RpcMethod:      "AddressBytesToString",
-					Use:            "address-bytes-to-string <address-bytes>",
+					Use:            "address-bytes-to-string [address-bytes]",
 					Short:          "Transform an address bytes to string",
 					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "address_bytes"}},
 				},
 				{
 					RpcMethod:      "AddressStringToBytes",
-					Use:            "address-string-to-bytes <address-string>",
+					Use:            "address-string-to-bytes [address-string]",
 					Short:          "Transform an address string to bytes",
 					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "address_string"}},
 				},

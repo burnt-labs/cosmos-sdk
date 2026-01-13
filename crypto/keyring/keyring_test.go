@@ -17,7 +17,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/cosmos/cosmos-sdk/codec"
-	codectestutil "github.com/cosmos/cosmos-sdk/codec/testutil"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
@@ -76,7 +75,7 @@ func TestNewKeyring(t *testing.T) {
 			dir:         t.TempDir(),
 			userInput:   strings.NewReader(""),
 			cdc:         cdc,
-			expectedErr: ErrUnknownBacked,
+			expectedErr: ErrUnknownBackend,
 		},
 	}
 	for _, tt := range tests {
@@ -224,7 +223,7 @@ func TestNewKey(t *testing.T) {
 			_, err = kb.KeyByAddress(addr)
 			require.NoError(t, err)
 
-			addr, err = codectestutil.CodecOptions{}.GetAddressCodec().StringToBytes("cosmos1yq8lgssgxlx9smjhes6ryjasmqmd3ts2559g0t")
+			addr, err = sdk.AccAddressFromBech32("cosmos1yq8lgssgxlx9smjhes6ryjasmqmd3ts2559g0t")
 			require.NoError(t, err)
 			_, err = kb.KeyByAddress(addr)
 			require.NotNil(t, err)
@@ -892,35 +891,35 @@ func TestImportPubKey(t *testing.T) {
 		uid         string
 		backend     string
 		armor       string
-		expectedErr string
+		expectedErr error
 	}{
 		{
 			name:        "correct import",
 			uid:         "correctTest",
 			backend:     BackendTest,
 			armor:       "-----BEGIN TENDERMINT PUBLIC KEY-----\nversion: 0.0.1\ntype: secp256k1\n\nCh8vY29zbW9zLmNyeXB0by5zZWNwMjU2azEuUHViS2V5EiMKIQOlcgxiZM4cR0LA\nwum483+L6zRnXC6zEKtQ4FEa6z0VrA==\n=CqBG\n-----END TENDERMINT PUBLIC KEY-----",
-			expectedErr: "",
+			expectedErr: nil,
 		},
 		{
 			name:        "modified armor",
 			uid:         "modified",
 			backend:     BackendTest,
 			armor:       "-----BEGIN TENDERMINT PUBLIC KEY-----\nversion: 0.0.1\ntype: secp256k1\n\nCh8vY29zbW8zLmNyeXB0by5zZWNwMjU2azEuUHViS2V5EiMKIQOlcgxiZM4cR0LA\nwum483+L6zRnXC6zEKtQ4FEa6z0VrA==\n=CqBG\n-----END TENDERMINT PUBLIC KEY-----",
-			expectedErr: "couldn't unarmor bytes: openpgp: invalid data: armor invalid",
+			expectedErr: fmt.Errorf("couldn't unarmor bytes: openpgp: invalid data: armor invalid"),
 		},
 		{
 			name:        "empty armor",
 			uid:         "empty",
 			backend:     BackendTest,
 			armor:       "",
-			expectedErr: "couldn't unarmor bytes: EOF",
+			expectedErr: fmt.Errorf("couldn't unarmor bytes: EOF"),
 		},
 		{
 			name:        "correct in memory import",
 			uid:         "inMemory",
 			backend:     BackendMemory,
 			armor:       "-----BEGIN TENDERMINT PUBLIC KEY-----\nversion: 0.0.1\ntype: secp256k1\n\nCh8vY29zbW9zLmNyeXB0by5zZWNwMjU2azEuUHViS2V5EiMKIQOlcgxiZM4cR0LA\nwum483+L6zRnXC6zEKtQ4FEa6z0VrA==\n=CqBG\n-----END TENDERMINT PUBLIC KEY-----",
-			expectedErr: "",
+			expectedErr: nil,
 		},
 	}
 	for _, tt := range tests {
@@ -928,10 +927,11 @@ func TestImportPubKey(t *testing.T) {
 			kb, err := New("keybasename", tt.backend, t.TempDir(), nil, cdc)
 			require.NoError(t, err)
 			err = kb.ImportPubKey(tt.uid, tt.armor)
-			if tt.expectedErr == "" {
+			if tt.expectedErr == nil {
 				require.NoError(t, err)
 			} else {
-				require.ErrorContains(t, err, tt.expectedErr)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.expectedErr.Error())
 			}
 		})
 	}
@@ -1120,7 +1120,7 @@ func TestNewAccount(t *testing.T) {
 			bip39Passphrease: "",
 			algo:             hd.Secp256k1,
 			mnemonic:         "fresh enact fresh ski large bicycle marine abandon motor end pact mixture annual elite bind fan write warrior adapt common manual cool happy dutch",
-			expectedErr:      errors.New("invalid byte at position"),
+			expectedErr:      fmt.Errorf("Invalid byte at position"),
 		},
 		{
 			name:             "in memory invalid mnemonic",
@@ -1130,7 +1130,7 @@ func TestNewAccount(t *testing.T) {
 			bip39Passphrease: "",
 			algo:             hd.Secp256k1,
 			mnemonic:         "malarkey pair crucial catch public canyon evil outer stage ten gym tornado",
-			expectedErr:      errors.New("invalid mnemonic"),
+			expectedErr:      fmt.Errorf("Invalid mnemonic"),
 		},
 	}
 	for _, tt := range tests {
@@ -2013,7 +2013,7 @@ func TestRenameKey(t *testing.T) {
 
 // TestChangeBcrypt tests the compatibility from upstream Bcrypt and our own
 func TestChangeBcrypt(t *testing.T) {
-	pw := []byte("somepasswword!")
+	pw := []byte("somepassword!")
 
 	saltBytes := cmtcrypto.CRandBytes(16)
 	cosmosHash, err := cosmosbcrypt.GenerateFromPassword(saltBytes, pw, 2)
@@ -2039,6 +2039,7 @@ func TestChangeBcrypt(t *testing.T) {
 
 func requireEqualRenamedKey(t *testing.T, key, mnemonic *Record, nameMatch bool) {
 	t.Helper()
+
 	if nameMatch {
 		require.Equal(t, key.Name, mnemonic.Name)
 	}
@@ -2058,6 +2059,7 @@ func requireEqualRenamedKey(t *testing.T, key, mnemonic *Record, nameMatch bool)
 
 func newKeyring(t *testing.T, name string) Keyring {
 	t.Helper()
+
 	cdc := getCodec()
 	kr, err := New(name, "test", t.TempDir(), nil, cdc)
 	require.NoError(t, err)
@@ -2066,6 +2068,7 @@ func newKeyring(t *testing.T, name string) Keyring {
 
 func newKeyRecord(t *testing.T, kr Keyring, name string) *Record {
 	t.Helper()
+
 	k, _, err := kr.NewMnemonic(name, English, sdk.FullFundraiserPath, DefaultBIP39Passphrase, hd.Secp256k1)
 	require.NoError(t, err)
 	return k
@@ -2073,6 +2076,7 @@ func newKeyRecord(t *testing.T, kr Keyring, name string) *Record {
 
 func assertKeysExist(t *testing.T, kr Keyring, names ...string) {
 	t.Helper()
+
 	for _, n := range names {
 		_, err := kr.Key(n)
 		require.NoError(t, err)

@@ -2,7 +2,6 @@ package mempool
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -13,8 +12,8 @@ import (
 )
 
 var (
-	_ Mempool  = (*PriorityNonceMempool[int64])(nil)
-	_ Iterator = (*PriorityNonceIterator[int64])(nil)
+	_ ExtMempool = (*PriorityNonceMempool[int64])(nil)
+	_ Iterator   = (*PriorityNonceIterator[int64])(nil)
 )
 
 type (
@@ -27,8 +26,8 @@ type (
 		// OnRead is a callback to be called when a tx is read from the mempool.
 		OnRead func(tx sdk.Tx)
 
-		// TxReplacement is a callback to be called when duplicated transaction nonce
-		// detected during mempool insert. An application can define a transaction
+		// TxReplacement is a callback to be called when a duplicated transaction nonce
+		// is detected during mempool insert. An application can define a transaction
 		// replacement rule based on tx priority or certain transaction fields.
 		TxReplacement func(op, np C, oTx, nTx sdk.Tx) bool
 
@@ -41,7 +40,7 @@ type (
 		// - if MaxTx < 0, `Insert` is a no-op.
 		MaxTx int
 
-		// SignerExtractor is an implementation which retrieves signer data from a sdk.Tx
+		// SignerExtractor is an implementation which retrieves signer data from an sdk.Tx
 		SignerExtractor SignerExtractionAdapter
 	}
 
@@ -216,21 +215,15 @@ func (mp *PriorityNonceMempool[C]) Insert(ctx context.Context, tx sdk.Tx) error 
 		return err
 	}
 	if len(sigs) == 0 {
-		return errors.New("tx must have at least one signer")
+		return fmt.Errorf("tx must have at least one signer")
 	}
 
 	sig := sigs[0]
 	sender := sig.Signer.String()
 	priority := mp.cfg.TxPriority.GetTxPriority(ctx, tx)
-	nonce := sig.Sequence
-
-	// if it's an unordered tx, we use the gas instead of the nonce
-	if unordered, ok := tx.(sdk.TxWithUnordered); ok && unordered.GetUnordered() {
-		gasLimit, err := unordered.GetGasLimit()
-		nonce = gasLimit
-		if err != nil {
-			return err
-		}
+	nonce, err := ChooseNonce(sig.Sequence, tx)
+	if err != nil {
+		return err
 	}
 
 	key := txMeta[C]{nonce: nonce, priority: priority, sender: sender}
@@ -264,13 +257,13 @@ func (mp *PriorityNonceMempool[C]) Insert(ctx context.Context, tx sdk.Tx) error 
 			)
 		}
 
-		mp.priorityIndex.Remove(txMeta[C]{
-			nonce:    nonce,
-			sender:   sender,
-			priority: oldScore.priority,
-			weight:   oldScore.weight,
-		})
+		oldKey := txMeta[C]{nonce: nonce, sender: sender, priority: oldScore.priority, weight: oldScore.weight}
+		mp.priorityIndex.Remove(oldKey)
+		mp.senderIndices[sender].Remove(oldKey)
 		mp.priorityCounts[oldScore.priority]--
+		if mp.priorityCounts[oldScore.priority] == 0 {
+			delete(mp.priorityCounts, oldScore.priority)
+		}
 	}
 
 	mp.priorityCounts[priority]++
@@ -353,7 +346,7 @@ func (i *PriorityNonceIterator[C]) Tx() sdk.Tx {
 }
 
 // Select returns a set of transactions from the mempool, ordered by priority
-// and sender-nonce in O(n) time. The passed in list of transactions are ignored.
+// and sender-nonce in O(n) time. The passed in list of transactions is ignored.
 // This is a readonly operation, the mempool is not modified.
 //
 // The maxBytes parameter defines the maximum number of bytes of transactions to
@@ -361,13 +354,13 @@ func (i *PriorityNonceIterator[C]) Tx() sdk.Tx {
 //
 // NOTE: It is not safe to use this iterator while removing transactions from
 // the underlying mempool.
-func (mp *PriorityNonceMempool[C]) Select(ctx context.Context, txs []sdk.Tx) Iterator {
+func (mp *PriorityNonceMempool[C]) Select(ctx context.Context, txs [][]byte) Iterator {
 	mp.mtx.Lock()
 	defer mp.mtx.Unlock()
 	return mp.doSelect(ctx, txs)
 }
 
-func (mp *PriorityNonceMempool[C]) doSelect(_ context.Context, _ []sdk.Tx) Iterator {
+func (mp *PriorityNonceMempool[C]) doSelect(_ context.Context, _ [][]byte) Iterator {
 	if mp.priorityIndex.Len() == 0 {
 		return nil
 	}
@@ -383,7 +376,7 @@ func (mp *PriorityNonceMempool[C]) doSelect(_ context.Context, _ []sdk.Tx) Itera
 }
 
 // SelectBy will hold the mutex during the iteration, callback returns if continue.
-func (mp *PriorityNonceMempool[C]) SelectBy(ctx context.Context, txs []sdk.Tx, callback func(sdk.Tx) bool) {
+func (mp *PriorityNonceMempool[C]) SelectBy(ctx context.Context, txs [][]byte, callback func(sdk.Tx) bool) {
 	mp.mtx.Lock()
 	defer mp.mtx.Unlock()
 
@@ -462,20 +455,14 @@ func (mp *PriorityNonceMempool[C]) Remove(tx sdk.Tx) error {
 		return err
 	}
 	if len(sigs) == 0 {
-		return errors.New("attempted to remove a tx with no signatures")
+		return fmt.Errorf("attempted to remove a tx with no signatures")
 	}
 
 	sig := sigs[0]
 	sender := sig.Signer.String()
-	nonce := sig.Sequence
-
-	// if it's an unordered tx, we use the gas instead of the nonce
-	if unordered, ok := tx.(sdk.TxWithUnordered); ok && unordered.GetUnordered() {
-		gasLimit, err := unordered.GetGasLimit()
-		nonce = gasLimit
-		if err != nil {
-			return err
-		}
+	nonce, err := ChooseNonce(sig.Sequence, tx)
+	if err != nil {
+		return err
 	}
 
 	scoreKey := txMeta[C]{nonce: nonce, sender: sender}
@@ -501,7 +488,7 @@ func (mp *PriorityNonceMempool[C]) Remove(tx sdk.Tx) error {
 func IsEmpty[C comparable](mempool Mempool) error {
 	mp := mempool.(*PriorityNonceMempool[C])
 	if mp.priorityIndex.Len() != 0 {
-		return errors.New("priorityIndex not empty")
+		return fmt.Errorf("priorityIndex not empty")
 	}
 
 	countKeys := make([]C, 0, len(mp.priorityCounts))

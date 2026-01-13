@@ -22,12 +22,7 @@ func (ak AccountKeeper) NewAccountWithAddress(ctx context.Context, addr sdk.AccA
 
 // NewAccount sets the next account number to a given account interface
 func (ak AccountKeeper) NewAccount(ctx context.Context, acc sdk.AccountI) sdk.AccountI {
-	accNum, err := ak.AccountsModKeeper.NextAccountNumber(ctx)
-	if err != nil {
-		panic(err)
-	}
-
-	if err := acc.SetAccountNumber(accNum); err != nil {
+	if err := acc.SetAccountNumber(ak.NextAccountNumber(ctx)); err != nil {
 		panic(err)
 	}
 
@@ -37,7 +32,7 @@ func (ak AccountKeeper) NewAccount(ctx context.Context, acc sdk.AccountI) sdk.Ac
 // HasAccount implements AccountKeeperI.
 func (ak AccountKeeper) HasAccount(ctx context.Context, addr sdk.AccAddress) bool {
 	has, _ := ak.Accounts.Has(ctx, addr)
-	return has || ak.AccountsModKeeper.IsAccountsModuleAccount(ctx, addr)
+	return has
 }
 
 // GetAccount implements AccountKeeperI.
@@ -49,6 +44,16 @@ func (ak AccountKeeper) GetAccount(ctx context.Context, addr sdk.AccAddress) sdk
 	return acc
 }
 
+// GetAllAccounts returns all accounts in the accountKeeper.
+func (ak AccountKeeper) GetAllAccounts(ctx context.Context) (accounts []sdk.AccountI) {
+	ak.IterateAccounts(ctx, func(acc sdk.AccountI) (stop bool) {
+		accounts = append(accounts, acc)
+		return false
+	})
+
+	return accounts
+}
+
 // SetAccount implements AccountKeeperI.
 func (ak AccountKeeper) SetAccount(ctx context.Context, acc sdk.AccountI) {
 	err := ak.Accounts.Set(ctx, acc.GetAddress(), acc)
@@ -57,10 +62,21 @@ func (ak AccountKeeper) SetAccount(ctx context.Context, acc sdk.AccountI) {
 	}
 }
 
-// RemoveAccount removes an account for the account mapper store.
+// RemoveAccount removes an account from the account mapper store.
 // NOTE: this will cause supply invariant violation if called
 func (ak AccountKeeper) RemoveAccount(ctx context.Context, acc sdk.AccountI) {
 	err := ak.Accounts.Remove(ctx, acc.GetAddress())
+	if err != nil {
+		panic(err)
+	}
+}
+
+// IterateAccounts iterates over all the stored accounts and performs a callback function.
+// Stops iteration when callback returns true.
+func (ak AccountKeeper) IterateAccounts(ctx context.Context, cb func(account sdk.AccountI) (stop bool)) {
+	err := ak.Accounts.Walk(ctx, nil, func(_ sdk.AccAddress, value sdk.AccountI) (bool, error) {
+		return cb(value), nil
+	})
 	if err != nil {
 		panic(err)
 	}

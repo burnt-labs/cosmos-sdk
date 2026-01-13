@@ -1,5 +1,4 @@
 //go:build !race
-// +build !race
 
 // Disabled -race because the package github.com/manifoldco/promptui@v0.9.0
 // has a data race and this code exposes it, but fixing it would require
@@ -17,9 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"cosmossdk.io/x/gov/client/cli"
-
-	codectestutil "github.com/cosmos/cosmos-sdk/codec/testutil"
+	"github.com/cosmos/cosmos-sdk/x/gov/client/cli"
 )
 
 type st struct {
@@ -50,9 +47,9 @@ func TestPromptIntegerOverflow(t *testing.T) {
 			fin, fw := readline.NewFillableStdin(os.Stdin)
 			readline.Stdin = fin
 			_, err := fw.Write([]byte(overflowStr + "\n"))
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
-			v, err := cli.Prompt(st{}, "", codectestutil.CodecOptions{}.GetAddressCodec())
+			v, err := cli.Prompt(st{}, "")
 			assert.Equal(t, st{}, v, "expected a value of zero")
 			require.NotNil(t, err, "expected a report of an overflow")
 			require.Contains(t, err.Error(), "range")
@@ -61,7 +58,7 @@ func TestPromptIntegerOverflow(t *testing.T) {
 }
 
 func TestPromptParseInteger(t *testing.T) {
-	// Intentionally sending a value out of the range of
+	// Intentionally sending a value out of the range of int.
 	values := []struct {
 		in   string
 		want int
@@ -82,7 +79,8 @@ func TestPromptParseInteger(t *testing.T) {
 			readline.Stdin = fin
 			_, err := fw.Write([]byte(tc.in + "\n"))
 			assert.NoError(t, err)
-			v, err := cli.Prompt(st{}, "", codectestutil.CodecOptions{}.GetAddressCodec())
+
+			v, err := cli.Prompt(st{}, "")
 			assert.Nil(t, err, "expected a nil error")
 			assert.Equal(t, tc.want, v.I, "expected %d = %d", tc.want, v.I)
 		})

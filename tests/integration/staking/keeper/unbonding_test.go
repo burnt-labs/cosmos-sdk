@@ -7,25 +7,25 @@ import (
 	"go.uber.org/mock/gomock"
 	"gotest.tools/v3/assert"
 
-	"cosmossdk.io/core/header"
 	"cosmossdk.io/math"
-	banktestutil "cosmossdk.io/x/bank/testutil"
-	stakingkeeper "cosmossdk.io/x/staking/keeper"
-	"cosmossdk.io/x/staking/testutil"
-	"cosmossdk.io/x/staking/types"
 
 	simtestutil "github.com/cosmos/cosmos-sdk/testutil/sims"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	banktestutil "github.com/cosmos/cosmos-sdk/x/bank/testutil"
+	stakingkeeper "github.com/cosmos/cosmos-sdk/x/staking/keeper"
+	"github.com/cosmos/cosmos-sdk/x/staking/testutil"
+	"github.com/cosmos/cosmos-sdk/x/staking/types"
 )
 
 // SetupUnbondingTests creates two validators and setup mocked staking hooks for testing unbonding
 func SetupUnbondingTests(t *testing.T, f *fixture, hookCalled *bool, ubdeID *uint64) (bondDenom string, addrDels []sdk.AccAddress, addrVals []sdk.ValAddress) {
 	t.Helper()
+
 	// setup hooks
 	mockCtrl := gomock.NewController(t)
-	mockStackingHooks := testutil.NewMockStakingHooks(mockCtrl)
-	mockStackingHooks.EXPECT().AfterDelegationModified(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	mockStackingHooks.EXPECT().AfterUnbondingInitiated(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx sdk.Context, id uint64) error {
+	mockStakingHooks := testutil.NewMockStakingHooks(mockCtrl)
+	mockStakingHooks.EXPECT().AfterDelegationModified(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mockStakingHooks.EXPECT().AfterUnbondingInitiated(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx sdk.Context, id uint64) error {
 		*hookCalled = true
 		// save id
 		*ubdeID = id
@@ -35,17 +35,16 @@ func SetupUnbondingTests(t *testing.T, f *fixture, hookCalled *bool, ubdeID *uin
 
 		return nil
 	}).AnyTimes()
-	mockStackingHooks.EXPECT().AfterValidatorBeginUnbonding(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	mockStackingHooks.EXPECT().AfterValidatorBonded(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	mockStackingHooks.EXPECT().AfterValidatorCreated(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	mockStackingHooks.EXPECT().AfterValidatorRemoved(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	mockStackingHooks.EXPECT().BeforeDelegationCreated(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	mockStackingHooks.EXPECT().BeforeDelegationRemoved(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	mockStackingHooks.EXPECT().BeforeDelegationSharesModified(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	mockStackingHooks.EXPECT().BeforeValidatorModified(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	mockStackingHooks.EXPECT().BeforeValidatorSlashed(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	mockStackingHooks.EXPECT().AfterConsensusPubKeyUpdate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	f.stakingKeeper.SetHooks(types.NewMultiStakingHooks(mockStackingHooks))
+	mockStakingHooks.EXPECT().AfterValidatorBeginUnbonding(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mockStakingHooks.EXPECT().AfterValidatorBonded(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mockStakingHooks.EXPECT().AfterValidatorCreated(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mockStakingHooks.EXPECT().AfterValidatorRemoved(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mockStakingHooks.EXPECT().BeforeDelegationCreated(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mockStakingHooks.EXPECT().BeforeDelegationRemoved(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mockStakingHooks.EXPECT().BeforeDelegationSharesModified(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mockStakingHooks.EXPECT().BeforeValidatorModified(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mockStakingHooks.EXPECT().BeforeValidatorSlashed(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	f.stakingKeeper.SetHooks(types.NewMultiStakingHooks(mockStakingHooks))
 
 	addrDels = simtestutil.AddTestAddrsIncremental(f.bankKeeper, f.stakingKeeper, f.sdkCtx, 2, math.NewInt(10000))
 	addrVals = simtestutil.ConvertAddrsToValAddrs(addrDels)
@@ -96,6 +95,7 @@ func doUnbondingDelegation(
 	hookCalled *bool,
 ) (completionTime time.Time, bondedAmt, notBondedAmt math.Int) {
 	t.Helper()
+
 	// UNDELEGATE
 	// Save original bonded and unbonded amounts
 	bondedAmt1 := bankKeeper.GetBalance(ctx, stakingKeeper.GetBondedPool(ctx).GetAddress(), bondDenom).Amount
@@ -134,6 +134,7 @@ func doRedelegation(
 	hookCalled *bool,
 ) (completionTime time.Time) {
 	t.Helper()
+
 	var err error
 	completionTime, err = stakingKeeper.BeginRedelegation(ctx, addrDels[0], addrVals[0], addrVals[1], math.LegacyNewDec(1))
 	assert.NilError(t, err)
@@ -158,6 +159,7 @@ func doValidatorUnbonding(
 	hookCalled *bool,
 ) (validator types.Validator) {
 	t.Helper()
+
 	validator, found := stakingKeeper.GetValidator(ctx, addrVal)
 	assert.Assert(t, found)
 	// Check that status is bonded
@@ -209,7 +211,7 @@ func TestValidatorUnbondingOnHold1(t *testing.T) {
 	assert.Equal(t, validator.OperatorAddress, unbondingVals[0])
 
 	// PROVIDER CHAIN'S UNBONDING PERIOD ENDS - BUT UNBONDING CANNOT COMPLETE
-	f.sdkCtx = f.sdkCtx.WithHeaderInfo(header.Info{Time: completionTime.Add(time.Duration(1))})
+	f.sdkCtx = f.sdkCtx.WithBlockTime(completionTime.Add(time.Duration(1)))
 	f.sdkCtx = f.sdkCtx.WithBlockHeight(completionHeight + 1)
 	assert.NilError(t, f.stakingKeeper.UnbondAllMatureValidators(f.sdkCtx))
 
@@ -255,7 +257,7 @@ func TestValidatorUnbondingOnHold2(t *testing.T) {
 	completionHeight := validator1.UnbondingHeight
 
 	// PROVIDER CHAIN'S UNBONDING PERIOD ENDS - BUT UNBONDING CANNOT COMPLETE
-	f.sdkCtx = f.sdkCtx.WithHeaderInfo(header.Info{Time: completionTime.Add(time.Duration(1))})
+	f.sdkCtx = f.sdkCtx.WithBlockTime(completionTime.Add(time.Duration(1)))
 	f.sdkCtx = f.sdkCtx.WithBlockHeight(completionHeight + 1)
 	assert.NilError(t, f.stakingKeeper.UnbondAllMatureValidators(f.sdkCtx))
 
@@ -330,7 +332,7 @@ func TestRedelegationOnHold1(t *testing.T) {
 	assert.Equal(t, 1, len(redelegations))
 
 	// PROVIDER CHAIN'S UNBONDING PERIOD ENDS - STOPPED UNBONDING CAN NOW COMPLETE
-	f.sdkCtx = f.sdkCtx.WithHeaderInfo(header.Info{Time: completionTime})
+	f.sdkCtx = f.sdkCtx.WithBlockTime(completionTime)
 	_, err = f.stakingKeeper.CompleteRedelegation(f.sdkCtx, addrDels[0], addrVals[0], addrVals[1])
 	assert.NilError(t, err)
 
@@ -354,7 +356,7 @@ func TestRedelegationOnHold2(t *testing.T) {
 	completionTime := doRedelegation(t, f.stakingKeeper, f.sdkCtx, addrDels, addrVals, &hookCalled)
 
 	// PROVIDER CHAIN'S UNBONDING PERIOD ENDS - BUT UNBONDING CANNOT COMPLETE
-	f.sdkCtx = f.sdkCtx.WithHeaderInfo(header.Info{Time: completionTime})
+	f.sdkCtx = f.sdkCtx.WithBlockTime(completionTime)
 	_, err := f.stakingKeeper.CompleteRedelegation(f.sdkCtx, addrDels[0], addrVals[0], addrVals[1])
 	assert.NilError(t, err)
 
@@ -384,10 +386,6 @@ func TestUnbondingDelegationOnHold1(t *testing.T) {
 
 	// _, app, ctx := createTestInput(t)
 	bondDenom, addrDels, addrVals := SetupUnbondingTests(t, f, &hookCalled, &ubdeID)
-	for _, addr := range addrDels {
-		acc := f.accountKeeper.NewAccountWithAddress(f.sdkCtx, addr)
-		f.accountKeeper.SetAccount(f.sdkCtx, acc)
-	}
 	completionTime, bondedAmt1, notBondedAmt1 := doUnbondingDelegation(t, f.stakingKeeper, f.bankKeeper, f.sdkCtx, bondDenom, addrDels, addrVals, &hookCalled)
 
 	// CONSUMER CHAIN'S UNBONDING PERIOD ENDS - BUT UNBONDING CANNOT COMPLETE
@@ -403,7 +401,7 @@ func TestUnbondingDelegationOnHold1(t *testing.T) {
 	assert.Assert(math.IntEq(t, notBondedAmt1, notBondedAmt3))
 
 	// PROVIDER CHAIN'S UNBONDING PERIOD ENDS - STOPPED UNBONDING CAN NOW COMPLETE
-	f.sdkCtx = f.sdkCtx.WithHeaderInfo(header.Info{Time: completionTime})
+	f.sdkCtx = f.sdkCtx.WithBlockTime(completionTime)
 	_, err = f.stakingKeeper.CompleteUnbonding(f.sdkCtx, addrDels[0], addrVals[0])
 	assert.NilError(t, err)
 
@@ -427,14 +425,10 @@ func TestUnbondingDelegationOnHold2(t *testing.T) {
 
 	// _, app, ctx := createTestInput(t)
 	bondDenom, addrDels, addrVals := SetupUnbondingTests(t, f, &hookCalled, &ubdeID)
-	for _, addr := range addrDels {
-		acc := f.accountKeeper.NewAccountWithAddress(f.sdkCtx, addr)
-		f.accountKeeper.SetAccount(f.sdkCtx, acc)
-	}
 	completionTime, bondedAmt1, notBondedAmt1 := doUnbondingDelegation(t, f.stakingKeeper, f.bankKeeper, f.sdkCtx, bondDenom, addrDels, addrVals, &hookCalled)
 
 	// PROVIDER CHAIN'S UNBONDING PERIOD ENDS - BUT UNBONDING CANNOT COMPLETE
-	f.sdkCtx = f.sdkCtx.WithHeaderInfo(header.Info{Time: completionTime})
+	f.sdkCtx = f.sdkCtx.WithBlockTime(completionTime)
 	_, err := f.stakingKeeper.CompleteUnbonding(f.sdkCtx, addrDels[0], addrVals[0])
 	assert.NilError(t, err)
 

@@ -10,16 +10,15 @@ import (
 	"cosmossdk.io/math"
 	"cosmossdk.io/store/prefix"
 	storetypes "cosmossdk.io/store/types"
-	"cosmossdk.io/x/params"
-	"cosmossdk.io/x/params/keeper"
-	"cosmossdk.io/x/params/types"
-	"cosmossdk.io/x/params/types/proposal"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
-	codectestutil "github.com/cosmos/cosmos-sdk/codec/testutil"
 	"github.com/cosmos/cosmos-sdk/testutil"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
+	"github.com/cosmos/cosmos-sdk/x/params"
+	"github.com/cosmos/cosmos-sdk/x/params/keeper"
+	"github.com/cosmos/cosmos-sdk/x/params/types"
+	"github.com/cosmos/cosmos-sdk/x/params/types/proposal"
 )
 
 type KeeperTestSuite struct {
@@ -31,7 +30,7 @@ type KeeperTestSuite struct {
 }
 
 func (suite *KeeperTestSuite) SetupTest() {
-	encodingCfg := moduletestutil.MakeTestEncodingConfig(codectestutil.CodecOptions{}, params.AppModule{})
+	encodingCfg := moduletestutil.MakeTestEncodingConfig(params.AppModuleBasic{})
 	key := storetypes.NewKVStoreKey(types.StoreKey)
 	tkey := storetypes.NewTransientStoreKey("params_transient_test")
 
@@ -50,7 +49,7 @@ func TestKeeperTestSuite(t *testing.T) {
 	suite.Run(t, new(KeeperTestSuite))
 }
 
-func validateNoOp(_ interface{}) error { return nil }
+func validateNoOp(_ any) error { return nil }
 
 func TestKeeper(t *testing.T) {
 	kvs := []struct {
@@ -144,7 +143,7 @@ func TestKeeper(t *testing.T) {
 	}
 }
 
-func indirect(ptr interface{}) interface{} {
+func indirect(ptr any) any {
 	return reflect.ValueOf(ptr).Elem().Interface()
 }
 
@@ -176,9 +175,9 @@ func TestSubspace(t *testing.T) {
 
 	kvs := []struct {
 		key   string
-		param interface{}
-		zero  interface{}
-		ptr   interface{}
+		param any
+		zero  any
+		ptr   any
 	}{
 		{"string", "test", "", new(string)},
 		{"bool", true, false, new(bool)},
@@ -222,9 +221,9 @@ func TestSubspace(t *testing.T) {
 	// Test space.Get, space.GetIfExists
 	for i, kv := range kvs {
 		require.NotPanics(t, func() { space.GetIfExists(ctx, []byte("invalid"), kv.ptr) }, "space.GetIfExists panics when no value exists, tc #%d", i)
-		require.Equal(t, kv.zero, indirect(kv.ptr), "space.GetIfExists unmarshalls when no value exists, tc #%d", i)
+		require.Equal(t, kv.zero, indirect(kv.ptr), "space.GetIfExists unmarshals when no value exists, tc #%d", i)
 		require.Panics(t, func() { space.Get(ctx, []byte("invalid"), kv.ptr) }, "invalid space.Get not panics when no value exists, tc #%d", i)
-		require.Equal(t, kv.zero, indirect(kv.ptr), "invalid space.Get unmarshalls when no value exists, tc #%d", i)
+		require.Equal(t, kv.zero, indirect(kv.ptr), "invalid space.Get unmarshals when no value exists, tc #%d", i)
 
 		require.NotPanics(t, func() { space.GetIfExists(ctx, []byte(kv.key), kv.ptr) }, "space.GetIfExists panics, tc #%d", i)
 		require.Equal(t, kv.param, indirect(kv.ptr), "stored param not equal, tc #%d", i)
@@ -232,7 +231,7 @@ func TestSubspace(t *testing.T) {
 		require.Equal(t, kv.param, indirect(kv.ptr), "stored param not equal, tc #%d", i)
 
 		require.Panics(t, func() { space.Get(ctx, []byte("invalid"), kv.ptr) }, "invalid space.Get not panics when no value exists, tc #%d", i)
-		require.Equal(t, kv.param, indirect(kv.ptr), "invalid space.Get unmarshalls when no value existt, tc #%d", i)
+		require.Equal(t, kv.param, indirect(kv.ptr), "invalid space.Get unmarshals when no value exist, tc #%d", i)
 
 		require.Panics(t, func() { space.Get(ctx, []byte(kv.key), nil) }, "invalid space.Get not panics when the pointer is nil, tc #%d", i)
 		require.Panics(t, func() { space.Get(ctx, []byte(kv.key), new(invalid)) }, "invalid space.Get not panics when the pointer is different type, tc #%d", i)

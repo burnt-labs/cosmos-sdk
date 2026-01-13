@@ -161,12 +161,12 @@ func NewIntFromBigIntMut(i *big.Int) Int {
 func NewIntFromString(s string) (res Int, ok bool) {
 	i, ok := newIntegerFromString(s)
 	if !ok {
-		return
+		return res, ok
 	}
 	// Check overflow
 	if bigIntOverflows(i) {
 		ok = false
-		return
+		return res, ok
 	}
 	return Int{i}, true
 }
@@ -435,7 +435,7 @@ func (i *Int) UnmarshalJSON(bz []byte) error {
 	return unmarshalJSON(i.i, bz)
 }
 
-// MarshalJSON for custom encoding scheme
+// marshalJSON for custom encoding scheme
 // Must be encoded as a string for JSON precision
 func marshalJSON(i encoding.TextMarshaler) ([]byte, error) {
 	text, err := i.MarshalText()
@@ -446,7 +446,7 @@ func marshalJSON(i encoding.TextMarshaler) ([]byte, error) {
 	return json.Marshal(string(text))
 }
 
-// UnmarshalJSON for custom decoding scheme
+// unmarshalJSON for custom decoding scheme
 // Must be encoded as a string for JSON precision
 func unmarshalJSON(i *big.Int, bz []byte) error {
 	var text string

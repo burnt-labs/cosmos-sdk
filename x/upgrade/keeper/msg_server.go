@@ -4,9 +4,9 @@ import (
 	"context"
 
 	"cosmossdk.io/errors"
-	"cosmossdk.io/x/upgrade/types"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/x/upgrade/types"
 )
 
 type msgServer struct {
@@ -27,11 +27,12 @@ var (
 )
 
 // SoftwareUpgrade implements the Msg/SoftwareUpgrade Msg service.
-func (k msgServer) SoftwareUpgrade(ctx context.Context, msg *types.MsgSoftwareUpgrade) (*types.MsgSoftwareUpgradeResponse, error) {
+func (k msgServer) SoftwareUpgrade(goCtx context.Context, msg *types.MsgSoftwareUpgrade) (*types.MsgSoftwareUpgradeResponse, error) {
 	if k.authority != msg.Authority {
 		return nil, errors.Wrapf(types.ErrInvalidSigner, "expected %s got %s", k.authority, msg.Authority)
 	}
 
+	ctx := sdk.UnwrapSDKContext(goCtx)
 	err := k.ScheduleUpgrade(ctx, msg.Plan)
 	if err != nil {
 		return nil, err

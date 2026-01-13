@@ -1,8 +1,6 @@
 package types
 
 import (
-	"encoding/binary"
-	"errors"
 	"fmt"
 	"time"
 
@@ -41,28 +39,20 @@ var (
 	LegacyDecValue collcodec.ValueCodec[math.LegacyDec] = legacyDecValueCodec{}
 
 	// TimeKey represents a collections.KeyCodec to work with time.Time
+	//
 	// Deprecated: exists only for state compatibility reasons, should not
 	// be used for new storage keys using time. Please use the time KeyCodec
 	// provided in the collections package.
 	TimeKey collcodec.KeyCodec[time.Time] = timeKeyCodec{}
-
-	// LEUint64Key is a collections KeyCodec that encodes uint64 using little endian.
-	// NOTE: it MUST NOT be used by other modules, distribution relies on this only for
-	// state backwards compatibility.
-	// Deprecated: use collections.Uint64Key instead.
-	LEUint64Key collcodec.KeyCodec[uint64] = leUint64Key{}
-
-	// LengthPrefixedBytesKey is a collections KeyCodec to work with []byte.
-	// Deprecated: exists only for state compatibility reasons, should not be
-	// used for new storage keys using []byte. Please use the BytesKey provided
-	// in the collections package.
-	LengthPrefixedBytesKey collcodec.KeyCodec[[]byte] = lengthPrefixedBytesKey{collections.BytesKey}
 )
 
 const (
-	Int       string = "math.Int"
-	Uint      string = "math.Uint"
 	LegacyDec string = "math.LegacyDec"
+)
+
+const (
+	Int  string = "math.Int"
+	Uint string = "math.Uint"
 )
 
 type addressUnion interface {
@@ -94,10 +84,10 @@ func (a genericAddressKey[T]) EncodeJSON(value T) ([]byte, error) {
 func (a genericAddressKey[T]) DecodeJSON(b []byte) (v T, err error) {
 	s, err := collections.StringKey.DecodeJSON(b)
 	if err != nil {
-		return
+		return v, err
 	}
 	v, err = a.stringDecoder(s)
-	return
+	return v, err
 }
 
 func (a genericAddressKey[T]) Stringify(key T) string {
@@ -152,28 +142,6 @@ func LengthPrefixedAddressKey[T addressUnion](keyCodec collcodec.KeyCodec[T]) co
 	return lengthPrefixedAddressKey[T]{
 		keyCodec,
 	}
-}
-
-// Deprecated: lengthPrefixedBytesKey is a special key codec used to retain state backwards compatibility
-// when a bytes key is used as an index key.
-type lengthPrefixedBytesKey struct {
-	collcodec.KeyCodec[[]byte]
-}
-
-func (g lengthPrefixedBytesKey) Encode(buffer, key []byte) (int, error) {
-	return g.EncodeNonTerminal(buffer, key)
-}
-
-func (g lengthPrefixedBytesKey) Decode(buffer []byte) (int, []byte, error) {
-	return g.DecodeNonTerminal(buffer)
-}
-
-func (g lengthPrefixedBytesKey) Size(key []byte) int {
-	return g.SizeNonTerminal(key)
-}
-
-func (g lengthPrefixedBytesKey) KeyType() string {
-	return "index_key/" + g.KeyCodec.KeyType()
 }
 
 // Collection Codecs
@@ -296,7 +264,7 @@ var timeSize = len(FormatTimeBytes(time.Time{}))
 
 func (timeKeyCodec) Decode(buffer []byte) (int, time.Time, error) {
 	if len(buffer) != timeSize {
-		return 0, time.Time{}, errors.New("invalid time buffer size")
+		return 0, time.Time{}, fmt.Errorf("invalid time buffer size")
 	}
 	t, err := ParseTimeBytes(buffer)
 	if err != nil {
@@ -328,37 +296,3 @@ func (t timeKeyCodec) DecodeNonTerminal(buffer []byte) (int, time.Time, error) {
 	return t.Decode(buffer[:timeSize])
 }
 func (t timeKeyCodec) SizeNonTerminal(key time.Time) int { return t.Size(key) }
-
-type leUint64Key struct{}
-
-func (l leUint64Key) Encode(buffer []byte, key uint64) (int, error) {
-	binary.LittleEndian.PutUint64(buffer, key)
-	return 8, nil
-}
-
-func (l leUint64Key) Decode(buffer []byte) (int, uint64, error) {
-	if size := len(buffer); size < 8 {
-		return 0, 0, fmt.Errorf("invalid buffer size, wanted 8 at least got %d", size)
-	}
-	return 8, binary.LittleEndian.Uint64(buffer), nil
-}
-
-func (l leUint64Key) Size(_ uint64) int { return 8 }
-
-func (l leUint64Key) EncodeJSON(value uint64) ([]byte, error) {
-	return collections.Uint64Key.EncodeJSON(value)
-}
-
-func (l leUint64Key) DecodeJSON(b []byte) (uint64, error) { return collections.Uint64Key.DecodeJSON(b) }
-
-func (l leUint64Key) Stringify(key uint64) string { return collections.Uint64Key.Stringify(key) }
-
-func (l leUint64Key) KeyType() string { return "little-endian-uint64" }
-
-func (l leUint64Key) EncodeNonTerminal(buffer []byte, key uint64) (int, error) {
-	return l.Encode(buffer, key)
-}
-
-func (l leUint64Key) DecodeNonTerminal(buffer []byte) (int, uint64, error) { return l.Decode(buffer) }
-
-func (l leUint64Key) SizeNonTerminal(_ uint64) int { return 8 }

@@ -15,7 +15,6 @@
 * 2021 Feb 24: The Cosmos SDK does not use Tendermint's `PubKey` interface anymore, but its own `cryptotypes.PubKey`. Updates to reflect this.
 * 2021 May 3: Rename `clientCtx.JSONMarshaler` to `clientCtx.JSONCodec`.
 * 2021 June 10: Add `clientCtx.Codec: codec.Codec`.
-* 2024 February 5: Account creation step
 
 ## Status
 
@@ -45,18 +44,18 @@ approach to the approach described below.
 ### Transactions
 
 Since interface values are encoded with `google.protobuf.Any` in state (see [ADR 019](adr-019-protobuf-state-encoding.md)),
-`sdk.Msg`s are encoding with `Any` in transactions.
+`sdk.Msg`s are encoded with `Any` in transactions.
 
 One of the main goals of using `Any` to encode interface values is to have a
 core set of types which is reused by apps so that
 clients can safely be compatible with as many chains as possible.
 
 It is one of the goals of this specification to provide a flexible cross-chain transaction
-format that can serve a wide variety of use cases without breaking client
+format that can serve a wide variety of use cases without breaking the client
 compatibility.
 
 In order to facilitate signing, transactions are separated into `TxBody`,
-which will be re-used by `SignDoc` below, and `signatures`:
+which will be reused by `SignDoc` below, and `signatures`:
 
 ```protobuf
 // types/types.proto
@@ -174,7 +173,7 @@ All of the signing modes below aim to provide the following guarantees:
 * **Predictable Gas**: if I am signing a transaction where I am paying a fee,
   the final gas is fully dependent on what I am signing
 
-These guarantees give the maximum amount confidence to message signers that
+These guarantees give the maximum amount of confidence to message signers that
 manipulation of `Tx`s by intermediaries can't result in any meaningful changes.
 
 #### `SIGN_MODE_DIRECT`
@@ -229,7 +228,7 @@ Signature verifiers do:
 
 In order to support legacy wallets and exchanges, Amino JSON will be temporarily
 supported transaction signing. Once wallets and exchanges have had a
-chance to upgrade to protobuf based signing, this option will be disabled. In
+chance to upgrade to protobuf-based signing, this option will be disabled. In
 the meantime, it is foreseen that disabling the current Amino signing would cause
 too much breakage to be feasible. Note that this is mainly a requirement of the
 Cosmos Hub and other chains may choose to disable Amino signing immediately.
@@ -249,7 +248,7 @@ falls short of the ideal.
 `SIGN_MODE_TEXTUAL` is intended as a placeholder for a human-readable
 encoding which will replace Amino JSON. This new encoding should be even more
 focused on readability than JSON, possibly based on formatting strings like
-[MessageFormat](https://unicode-org.github.io/icu/userguide/format_parse/messages/).
+[MessageFormat](http://userguide.icu-project.org/formatparse/messages).
 
 In order to ensure that the new human-readable format does not suffer from
 transaction malleability issues, `SIGN_MODE_TEXTUAL`
@@ -261,7 +260,7 @@ by `SIGN_MODE_TEXTUAL` when it is implemented.
 
 ### Unknown Field Filtering
 
-Unknown fields in protobuf messages should generally be rejected by transaction
+Unknown fields in protobuf messages should generally be rejected by the transaction
 processors because:
 
 * important data may be present in the unknown fields, that if ignored, will
@@ -318,8 +317,6 @@ the client logic will now need to take a codec interface that knows not only how
 to handle all the types, but also knows how to generate transactions, signatures,
 and messages.
 
-If the account is sending its first transaction, the account number must be set to 0. This is due to the account not being created yet. 
-
 ```go
 type AccountRetriever interface {
   GetAccount(clientCtx Context, addr sdk.AccAddress) (client.Account, error)
@@ -349,7 +346,7 @@ type TxBuilder interface {
 ```
 
 We then update `Context` to have new fields: `Codec`, `TxGenerator`,
-and `AccountRetriever`, and we update `AppModule.GetTxCmd` to take
+and `AccountRetriever`, and we update `AppModuleBasic.GetTxCmd` to take
 a `Context` which should have all of these fields pre-populated.
 
 Each client method should then use one of the `Init` methods to re-initialize
@@ -418,7 +415,7 @@ To generate a signature in `SIGN_MODE_DIRECT_AUX` these steps would be followed:
         // PublicKey is included in SignDocAux :
         // 1. as a special case for multisig public keys. For multisig public keys,
         // the signer should use the top-level multisig public key they are signing
-        // against, not their own public key. This is to prevent against a form
+        // against, not their own public key. This is to prevent a form
         // of malleability where a signature could be taken out of context of the
         // multisig key that was intended to be signed for
         // 2. to guard against scenario where configuration information is encoded
@@ -434,7 +431,7 @@ To generate a signature in `SIGN_MODE_DIRECT_AUX` these steps would be followed:
     ```
 
 2. Sign the encoded `SignDocAux` bytes
-3. Send their signature and `SignerInfo` to primary signer who will then
+3. Send their signature and `SignerInfo` to the primary signer who will then
    sign and broadcast the final transaction (with `SIGN_MODE_DIRECT` and `AuthInfo`
    added) once enough signatures have been collected
 

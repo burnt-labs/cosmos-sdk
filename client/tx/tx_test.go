@@ -2,7 +2,6 @@ package tx
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -12,30 +11,24 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
-	addresscodec "github.com/cosmos/cosmos-sdk/codec/address"
-	"github.com/cosmos/cosmos-sdk/codec/testutil"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/cosmos/cosmos-sdk/testutil/testdata"
-	countertypes "github.com/cosmos/cosmos-sdk/testutil/x/counter/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
 	txtypes "github.com/cosmos/cosmos-sdk/types/tx"
 	signingtypes "github.com/cosmos/cosmos-sdk/types/tx/signing"
-	"github.com/cosmos/cosmos-sdk/x/auth/ante"
+	ante "github.com/cosmos/cosmos-sdk/x/auth/ante"
 	"github.com/cosmos/cosmos-sdk/x/auth/signing"
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 )
 
-var ac = testutil.CodecOptions{}.GetAddressCodec()
-
 func newTestTxConfig() (client.TxConfig, codec.Codec) {
-	encodingConfig := moduletestutil.MakeTestEncodingConfig(testutil.CodecOptions{})
-	cdc := codec.NewProtoCodec(encodingConfig.InterfaceRegistry)
-	signingCtx := encodingConfig.InterfaceRegistry.SigningContext()
-	return authtx.NewTxConfig(cdc, signingCtx.AddressCodec(), signingCtx.ValidatorAddressCodec(), authtx.DefaultSignModes), encodingConfig.Codec
+	encodingConfig := moduletestutil.MakeTestEncodingConfig()
+	return authtx.NewTxConfig(codec.NewProtoCodec(encodingConfig.InterfaceRegistry), authtx.DefaultSignModes), encodingConfig.Codec
 }
 
 // mockContext is a mock client.Context to return arbitrary simulation response, used to
@@ -45,9 +38,9 @@ type mockContext struct {
 	wantErr bool
 }
 
-func (m mockContext) Invoke(_ context.Context, _ string, _, reply interface{}, _ ...grpc.CallOption) (err error) {
+func (m mockContext) Invoke(_ context.Context, _ string, _, reply any, _ ...grpc.CallOption) (err error) {
 	if m.wantErr {
-		return errors.New("mock err")
+		return fmt.Errorf("mock err")
 	}
 
 	*(reply.(*txtypes.SimulateResponse)) = txtypes.SimulateResponse{
@@ -130,11 +123,8 @@ func TestBuildSimTx(t *testing.T) {
 	_, _, err = kb.NewMnemonic("test_key1", keyring.English, path, keyring.DefaultBIP39Passphrase, hd.Secp256k1)
 	require.NoError(t, err)
 
-	fromAddr, err := ac.BytesToString(sdk.AccAddress("from"))
-	require.NoError(t, err)
-
 	txf := mockTxFactory(txCfg).WithSignMode(defaultSignMode).WithKeybase(kb)
-	msg := &countertypes.MsgIncreaseCounter{Signer: fromAddr, Count: 1}
+	msg := banktypes.NewMsgSend(sdk.AccAddress("from"), sdk.AccAddress("to"), nil)
 	bz, err := txf.BuildSimTx(msg)
 	require.NoError(t, err)
 	require.NotNil(t, bz)
@@ -149,10 +139,8 @@ func TestBuildUnsignedTx(t *testing.T) {
 
 	_, _, err = kb.NewMnemonic("test_key1", keyring.English, path, keyring.DefaultBIP39Passphrase, hd.Secp256k1)
 	require.NoError(t, err)
-	fromAddr, err := ac.BytesToString(sdk.AccAddress("from"))
-	require.NoError(t, err)
 	txf := mockTxFactory(txConfig).WithKeybase(kb)
-	msg := &countertypes.MsgIncreaseCounter{Signer: fromAddr, Count: 1}
+	msg := banktypes.NewMsgSend(sdk.AccAddress("from"), sdk.AccAddress("to"), nil)
 	tx, err := txf.BuildUnsignedTx(msg)
 	require.NoError(t, err)
 	require.NotNil(t, tx)
@@ -163,18 +151,15 @@ func TestBuildUnsignedTx(t *testing.T) {
 }
 
 func TestBuildUnsignedTxWithWithExtensionOptions(t *testing.T) {
-	txCfg := moduletestutil.MakeBuilderTestTxConfig(testutil.CodecOptions{})
+	txCfg := moduletestutil.MakeBuilderTestTxConfig()
 	extOpts := []*codectypes.Any{
 		{
 			TypeUrl: "/test",
 			Value:   []byte("test"),
 		},
 	}
-
-	fromAddr, err := ac.BytesToString(sdk.AccAddress("from"))
-	require.NoError(t, err)
 	txf := mockTxFactory(txCfg).WithExtensionOptions(extOpts...)
-	msg := &countertypes.MsgIncreaseCounter{Signer: fromAddr, Count: 1}
+	msg := banktypes.NewMsgSend(sdk.AccAddress("from"), sdk.AccAddress("to"), nil)
 	tx, err := txf.BuildUnsignedTx(msg)
 	require.NoError(t, err)
 	require.NotNil(t, tx)
@@ -217,9 +202,7 @@ func TestMnemonicInMemo(t *testing.T) {
 				WithChainID("test-chain").
 				WithKeybase(kb)
 
-			fromAddr, err := ac.BytesToString(sdk.AccAddress("from"))
-			require.NoError(t, err)
-			msg := &countertypes.MsgIncreaseCounter{Signer: fromAddr, Count: 1}
+			msg := banktypes.NewMsgSend(sdk.AccAddress("from"), sdk.AccAddress("to"), nil)
 			tx, err := txf.BuildUnsignedTx(msg)
 			if tc.error {
 				require.Error(t, err)
@@ -270,22 +253,14 @@ func TestSign(t *testing.T) {
 	requireT.NoError(err)
 	addr2, err := k2.GetAddress()
 	requireT.NoError(err)
-	addr1Str, err := ac.BytesToString(addr1)
-	require.NoError(t, err)
-	addr2Str, err := ac.BytesToString(addr2)
-	require.NoError(t, err)
-	msg1 := &countertypes.MsgIncreaseCounter{Signer: addr1Str, Count: 1}
-	msg2 := &countertypes.MsgIncreaseCounter{Signer: addr2Str, Count: 1}
+	msg1 := banktypes.NewMsgSend(addr1, sdk.AccAddress("to"), nil)
+	msg2 := banktypes.NewMsgSend(addr2, sdk.AccAddress("to"), nil)
 	txb, err := txfNoKeybase.BuildUnsignedTx(msg1, msg2)
 	requireT.NoError(err)
 	txb2, err := txfNoKeybase.BuildUnsignedTx(msg1, msg2)
 	requireT.NoError(err)
 	txbSimple, err := txfNoKeybase.BuildUnsignedTx(msg2)
 	requireT.NoError(err)
-
-	clientCtx := client.Context{}.
-		WithAddressCodec(addresscodec.NewBech32Codec(sdk.GetConfig().GetBech32AccountAddrPrefix())).
-		WithCmdContext(context.TODO())
 
 	testCases := []struct {
 		name         string
@@ -340,7 +315,7 @@ func TestSign(t *testing.T) {
 		/**** test double sign Direct mode
 		  signing transaction with 2 or more DIRECT signers should fail in DIRECT mode ****/
 		{
-			"direct: should  append a DIRECT signature with existing AMINO",
+			"direct: should append a DIRECT signature with existing AMINO",
 			// txb already has 1 AMINO signature
 			txfDirect, txb, from1, false,
 			[]cryptotypes.PubKey{pubKey2, pubKey1},
@@ -376,7 +351,7 @@ func TestSign(t *testing.T) {
 	var prevSigs []signingtypes.SignatureV2
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err = Sign(clientCtx, tc.txf, tc.from, tc.txb, tc.overwrite)
+			err = Sign(context.TODO(), tc.txf, tc.from, tc.txb, tc.overwrite)
 			if len(tc.expectedPKs) == 0 {
 				requireT.Error(err)
 			} else {
@@ -428,36 +403,26 @@ func TestPreprocessHook(t *testing.T) {
 
 	addr1, err := kr.GetAddress()
 	requireT.NoError(err)
-	addr1Str, err := ac.BytesToString(addr1)
-	require.NoError(t, err)
-	addr2Str, err := ac.BytesToString(addr2)
-	require.NoError(t, err)
-	msg1 := &countertypes.MsgIncreaseCounter{Signer: addr1Str, Count: 1}
-	msg2 := &countertypes.MsgIncreaseCounter{Signer: addr2Str, Count: 1}
+	msg1 := banktypes.NewMsgSend(addr1, sdk.AccAddress("to"), nil)
+	msg2 := banktypes.NewMsgSend(addr2, sdk.AccAddress("to"), nil)
 	txb, err := txfDirect.BuildUnsignedTx(msg1, msg2)
 	requireT.NoError(err)
 
-	clientCtx := client.Context{}.
-		WithAddressCodec(addresscodec.NewBech32Codec(sdk.GetConfig().GetBech32AccountAddrPrefix())).
-		WithCmdContext(context.TODO())
-
-	err = Sign(clientCtx, txfDirect, from, txb, false)
+	err = Sign(context.TODO(), txfDirect, from, txb, false)
 	requireT.NoError(err)
 
 	// Run preprocessing
 	err = txfDirect.PreprocessTx(from, txb)
 	requireT.NoError(err)
 
-	tx := txb.GetTx()
-	hasExtOptsTx, ok := tx.(ante.HasExtensionOptionsTx)
+	hasExtOptsTx, ok := txb.(ante.HasExtensionOptionsTx)
 	requireT.True(ok)
 
 	hasOneExt := len(hasExtOptsTx.GetExtensionOptions()) == 1
 	requireT.True(hasOneExt)
 
 	opt := hasExtOptsTx.GetExtensionOptions()[0]
-	requireT.Equal(opt.TypeUrl, extAny.TypeUrl)
-	requireT.Equal(opt.Value, extAny.Value)
+	requireT.Equal(opt, extAny)
 }
 
 func testSigners(require *require.Assertions, tr signing.Tx, pks ...cryptotypes.PubKey) []signingtypes.SignatureV2 {

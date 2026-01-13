@@ -27,7 +27,7 @@ type Addressable interface {
 func Hash(typ string, key []byte) []byte {
 	hasher := sha256.New()
 	_, err := hasher.Write(conv.UnsafeStrToBytes(typ))
-	// the error always nil, it's here only to satisfy the io.Writer interface
+	// the error is always nil, it's here only to satisfy the io.Writer interface
 	errors.AssertNil(err)
 	th := hasher.Sum(nil)
 
@@ -86,7 +86,7 @@ func Module(moduleName string, derivationKeys ...[]byte) []byte {
 }
 
 // Derive derives a new address from the main `address` and a derivation `key`.
-// This function is used to create a sub accounts. To create a module accounts use the
+// This function is used to create sub accounts. To create a module accounts use the
 // `Module` function.
 func Derive(address, key []byte) []byte {
 	return Hash(conv.UnsafeBytesToStr(address), key)

@@ -1,7 +1,7 @@
 package proposal
 
 import (
-	govtypes "cosmossdk.io/x/gov/types/v1beta1"
+	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types/v1beta1"
 )
 
 const (

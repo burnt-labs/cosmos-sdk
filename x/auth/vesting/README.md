@@ -4,11 +4,6 @@ sidebar_position: 1
 
 # `x/auth/vesting`
 
-:::warning
-Vesting accounts are deprecated in favor of `x/accounts`.
-The creation of vesting account, using `x/auth/vesting`, is not possible since v0.52.
-For existing chains, importing the `x/auth/vesting module` is still required for backward compatibility purposes.
-:::
 
 * [Intro and Requirements](#intro-and-requirements)
 * [Note](#note)
@@ -46,7 +41,7 @@ For all vesting accounts, the owner of the vesting account is able to delegate a
 
 ## Note
 
-Vesting accounts can be initialized with some vesting and non-vesting coins. The non-vesting coins would be immediately transferable. DelayedVesting ContinuousVesting, PeriodicVesting and PermenantVesting accounts can be created with normal messages after genesis. Other types of vesting accounts must be created at genesis, or as part of a manual network upgrade. The current specification only allows for _unconditional_ vesting (ie. there is no possibility of reaching `ET` and
+Vesting accounts can be initialized with some vesting and non-vesting coins. The non-vesting coins would be immediately transferable. DelayedVesting ContinuousVesting, PeriodicVesting and PermanentVesting accounts can be created with normal messages after genesis. Other types of vesting accounts must be created at genesis, or as part of a manual network upgrade. The current specification only allows for _unconditional_ vesting (ie. there is no possibility of reaching `ET` and
 having coins fail to vest).
 
 ## Vesting Account Types
@@ -78,25 +73,25 @@ type VestingAccount interface {
 ### BaseVestingAccount
 
 ```protobuf reference
-https://github.com/cosmos/cosmos-sdk/blob/v0.47.0-rc1/proto/cosmos/vesting/v1beta1/vesting.proto#L11-L35
+https://github.com/cosmos/cosmos-sdk/tree/release/v0.50.x/proto/cosmos/vesting/v1beta1/vesting.proto#L11-L35
 ```
 
 ### ContinuousVestingAccount
 
 ```protobuf reference
-https://github.com/cosmos/cosmos-sdk/blob/v0.47.0-rc1/proto/cosmos/vesting/v1beta1/vesting.proto#L37-L46
+https://github.com/cosmos/cosmos-sdk/tree/release/v0.50.x/proto/cosmos/vesting/v1beta1/vesting.proto#L37-L46
 ```
 
 ### DelayedVestingAccount
 
 ```protobuf reference
-https://github.com/cosmos/cosmos-sdk/blob/v0.47.0-rc1/proto/cosmos/vesting/v1beta1/vesting.proto#L48-L57
+https://github.com/cosmos/cosmos-sdk/tree/release/v0.50.x/proto/cosmos/vesting/v1beta1/vesting.proto#L48-L57
 ```
 
 ### Period
 
 ```protobuf reference
-https://github.com/cosmos/cosmos-sdk/blob/v0.47.0-rc1/proto/cosmos/vesting/v1beta1/vesting.proto#L59-L69
+https://github.com/cosmos/cosmos-sdk/tree/release/v0.50.x/proto/cosmos/vesting/v1beta1/vesting.proto#L59-L69
 ```
 
 ```go
@@ -108,7 +103,7 @@ type Periods []Period
 ### PeriodicVestingAccount
 
 ```protobuf reference
-https://github.com/cosmos/cosmos-sdk/blob/v0.47.0-rc1/proto/cosmos/vesting/v1beta1/vesting.proto#L71-L81
+https://github.com/cosmos/cosmos-sdk/tree/release/v0.50.x/proto/cosmos/vesting/v1beta1/vesting.proto#L71-L81
 ```
 
 In order to facilitate less ad-hoc type checking and assertions and to support flexibility in account balance usage, the existing `x/bank` `ViewKeeper` interface is updated to contain the following:
@@ -128,7 +123,7 @@ type ViewKeeper interface {
 ### PermanentLockedAccount
 
 ```protobuf reference
-https://github.com/cosmos/cosmos-sdk/blob/v0.47.0-rc1/proto/cosmos/vesting/v1beta1/vesting.proto#L83-L94
+https://github.com/cosmos/cosmos-sdk/tree/release/v0.50.x/proto/cosmos/vesting/v1beta1/vesting.proto#L83-L94
 ```
 
 ## Vesting Account Specification
@@ -261,7 +256,7 @@ func (k Keeper) LockedCoins(ctx Context, addr AccAddress) Coins {
     acc := k.GetAccount(ctx, addr)
     if acc != nil {
         if acc.IsVesting() {
-            return acc.LockedCoins(ctx.HeaderInfo().Time)
+            return acc.LockedCoins(ctx.BlockTime())
         }
     }
 
@@ -582,3 +577,42 @@ according to a custom vesting schedule.
 Coins in this account can still be used for delegating and for governance votes even while locked.
 
 
+## CLI
+
+A user can query and interact with the `vesting` module using the CLI.
+
+### Transactions
+
+The `tx` commands allow users to interact with the `vesting` module.
+
+```bash
+simd tx vesting --help
+```
+
+#### create-periodic-vesting-account
+
+The `create-periodic-vesting-account` command creates a new vesting account funded with an allocation of tokens, where a sequence of coins and period length in seconds. Periods are sequential, in that the duration of a period only starts at the end of the previous period. The duration of the first period starts upon account creation.
+
+```bash
+simd tx vesting create-periodic-vesting-account [to_address] [periods_json_file] [flags]
+```
+
+Example:
+
+```bash
+simd tx vesting create-periodic-vesting-account cosmos1.. periods.json
+```
+
+#### create-vesting-account
+
+The `create-vesting-account` command creates a new vesting account funded with an allocation of tokens. The account can either be a delayed or continuous vesting account, which is determined by the '--delayed' flag. All vesting accounts created will have their start time set by the committed block's time. The end_time must be provided as a UNIX epoch timestamp.
+
+```bash
+simd tx vesting create-vesting-account [to_address] [amount] [end_time] [flags]
+```
+
+Example:
+
+```bash
+simd tx vesting create-vesting-account cosmos1.. 100stake 2592000
+```

@@ -22,6 +22,7 @@ type signModeLegacyAminoJSONHandler struct{}
 
 // NewSignModeLegacyAminoJSONHandler returns a new signModeLegacyAminoJSONHandler.
 // Note: The public constructor is only used for testing.
+//
 // Deprecated: Please use x/tx/signing/aminojson instead.
 func NewSignModeLegacyAminoJSONHandler() signing.SignModeHandler {
 	return signModeLegacyAminoJSONHandler{}
@@ -43,16 +44,16 @@ func (s signModeLegacyAminoJSONHandler) GetSignBytes(mode signingtypes.SignMode,
 		return nil, fmt.Errorf("expected %s, got %s", signingtypes.SignMode_SIGN_MODE_LEGACY_AMINO_JSON, mode)
 	}
 
-	protoTx, ok := tx.(*gogoTxWrapper)
+	protoTx, ok := tx.(*wrapper)
 	if !ok {
 		return nil, fmt.Errorf("can only handle a protobuf Tx, got %T", tx)
 	}
 
-	if protoTx.TxBodyHasUnknownNonCriticals {
+	if protoTx.txBodyHasUnknownNonCriticals {
 		return nil, errorsmod.Wrap(sdkerrors.ErrInvalidRequest, aminoNonCriticalFieldsError)
 	}
 
-	body := protoTx.Tx.Body
+	body := protoTx.tx.Body
 
 	if len(body.ExtensionOptions) != 0 || len(body.NonCriticalExtensionOptions) != 0 {
 		return nil, errorsmod.Wrapf(sdkerrors.ErrInvalidRequest, "%s does not support protobuf extension options", signingtypes.SignMode_SIGN_MODE_LEGACY_AMINO_JSON)
@@ -68,8 +69,8 @@ func (s signModeLegacyAminoJSONHandler) GetSignBytes(mode signingtypes.SignMode,
 		legacytx.StdFee{
 			Amount:  protoTx.GetFee(),
 			Gas:     protoTx.GetGas(),
-			Payer:   protoTx.Tx.AuthInfo.Fee.Payer,
-			Granter: protoTx.Tx.AuthInfo.Fee.Granter,
+			Payer:   protoTx.tx.AuthInfo.Fee.Payer,
+			Granter: protoTx.tx.AuthInfo.Fee.Granter,
 		},
 		tx.GetMsgs(), protoTx.GetMemo(),
 	), nil

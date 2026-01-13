@@ -2,18 +2,17 @@ package keeper_test
 
 import (
 	storetypes "cosmossdk.io/store/types"
-	"cosmossdk.io/x/params"
-	paramskeeper "cosmossdk.io/x/params/keeper"
 
 	"github.com/cosmos/cosmos-sdk/codec"
-	codectestutil "github.com/cosmos/cosmos-sdk/codec/testutil"
 	sdktestutil "github.com/cosmos/cosmos-sdk/testutil"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
+	"github.com/cosmos/cosmos-sdk/x/params"
+	paramskeeper "github.com/cosmos/cosmos-sdk/x/params/keeper"
 )
 
 func testComponents() (*codec.LegacyAmino, sdk.Context, storetypes.StoreKey, storetypes.StoreKey, paramskeeper.Keeper) {
-	encodingConfig := moduletestutil.MakeTestEncodingConfig(codectestutil.CodecOptions{}, params.AppModule{})
+	encodingConfig := moduletestutil.MakeTestEncodingConfig(params.AppModuleBasic{})
 	cdc := encodingConfig.Codec
 
 	legacyAmino := createTestCodec()
@@ -34,7 +33,7 @@ type s struct {
 func createTestCodec() *codec.LegacyAmino {
 	cdc := codec.NewLegacyAmino()
 	sdk.RegisterLegacyAminoCodec(cdc)
-	cdc.RegisterConcrete(s{}, "test/s")
-	cdc.RegisterConcrete(invalid{}, "test/invalid")
+	cdc.RegisterConcrete(s{}, "test/s", nil)
+	cdc.RegisterConcrete(invalid{}, "test/invalid", nil)
 	return cdc
 }

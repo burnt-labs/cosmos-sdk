@@ -4,10 +4,9 @@ import (
 	"bytes"
 	"fmt"
 
-	"google.golang.org/protobuf/reflect/protoreflect"
+	protov2 "google.golang.org/protobuf/proto"
 
 	bankv1beta1 "cosmossdk.io/api/cosmos/bank/v1beta1"
-	"cosmossdk.io/core/transaction"
 	errorsmod "cosmossdk.io/errors"
 
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
@@ -17,7 +16,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/auth/signing"
 )
 
-// KVStoreTx is an sdk.Tx which is its own sdk.Msg.
 type KVStoreTx struct {
 	key     []byte
 	value   []byte
@@ -72,11 +70,11 @@ func (msg *KVStoreTx) Equals(key cryptotypes.PubKey) bool {
 	panic("implement me")
 }
 
-// dummy implementation of proto.Message
-
-func (msg *KVStoreTx) Reset()         {}
-func (msg *KVStoreTx) String() string { return "TODO" }
-func (msg *KVStoreTx) ProtoMessage()  {}
+func (msg *KVStoreTx) Reset() {}
+func (msg *KVStoreTx) String() string {
+	return fmt.Sprintf("KVStoreTx{key:%q value:%q address:%s}", msg.key, msg.value, msg.address.String())
+}
+func (msg *KVStoreTx) ProtoMessage() {}
 
 var (
 	_ sdk.Tx                  = &KVStoreTx{}
@@ -96,22 +94,6 @@ func NewTx(key, value string, accAddress sdk.AccAddress) *KVStoreTx {
 	}
 }
 
-func (msg *KVStoreTx) Hash() [32]byte {
-	return [32]byte{}
-}
-
-func (msg *KVStoreTx) GetGasLimit() (uint64, error) {
-	return 0, nil
-}
-
-func (msg *KVStoreTx) GetMessages() ([]transaction.Msg, error) {
-	return nil, nil
-}
-
-func (msg *KVStoreTx) GetSenders() ([][]byte, error) {
-	return nil, nil
-}
-
 func (msg *KVStoreTx) Type() string {
 	return "kvstore_tx"
 }
@@ -120,15 +102,14 @@ func (msg *KVStoreTx) GetMsgs() []sdk.Msg {
 	return []sdk.Msg{msg}
 }
 
-func (msg *KVStoreTx) GetReflectMessages() ([]protoreflect.Message, error) {
-	return []protoreflect.Message{(&bankv1beta1.MsgSend{FromAddress: msg.address.String()}).ProtoReflect()}, nil // this is a hack for tests
+func (msg *KVStoreTx) GetMsgsV2() ([]protov2.Message, error) {
+	return []protov2.Message{&bankv1beta1.MsgSend{FromAddress: msg.address.String()}}, nil // this is a hack for tests
 }
 
 func (msg *KVStoreTx) GetSignBytes() []byte {
 	return msg.bytes
 }
 
-// ValidateBasic should the app be calling this? or only handlers?
 func (msg *KVStoreTx) ValidateBasic() error {
 	return nil
 }

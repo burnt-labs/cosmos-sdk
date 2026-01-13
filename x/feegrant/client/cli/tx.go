@@ -1,23 +1,23 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
-	"cosmossdk.io/x/feegrant"
+	"cosmossdk.io/core/address"
 
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/client/tx"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/version"
+	"github.com/cosmos/cosmos-sdk/x/feegrant"
 )
 
-// flag for feegrant module
+// flags for feegrant module
 const (
 	FlagExpiration  = "expiration"
 	FlagPeriod      = "period"
@@ -27,7 +27,7 @@ const (
 )
 
 // GetTxCmd returns the transaction commands for feegrant module
-func GetTxCmd() *cobra.Command {
+func GetTxCmd(ac address.Codec) *cobra.Command {
 	feegrantTxCmd := &cobra.Command{
 		Use:                        feegrant.ModuleName,
 		Short:                      "Feegrant transactions sub-commands",
@@ -38,7 +38,7 @@ func GetTxCmd() *cobra.Command {
 	}
 
 	feegrantTxCmd.AddCommand(
-		NewCmdFeeGrant(),
+		NewCmdFeeGrant(ac),
 	)
 
 	return feegrantTxCmd
@@ -46,9 +46,9 @@ func GetTxCmd() *cobra.Command {
 
 // NewCmdFeeGrant returns a CLI command handler to create a MsgGrantAllowance transaction.
 // This command is more powerful than AutoCLI generated command as it allows a better input validation.
-func NewCmdFeeGrant() *cobra.Command {
+func NewCmdFeeGrant(ac address.Codec) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "grant <granter_key_or_address> <grantee>",
+		Use:     "grant [granter_key_or_address] [grantee]",
 		Aliases: []string{"grant-allowance"},
 		Short:   "Grant Fee allowance to an address",
 		Long: strings.TrimSpace(
@@ -75,16 +75,12 @@ Examples:
 				return err
 			}
 
-			_, err = clientCtx.AddressCodec.StringToBytes(args[1])
+			grantee, err := ac.StringToBytes(args[1])
 			if err != nil {
 				return err
 			}
 
 			granter := clientCtx.GetFromAddress()
-			granterStr, err := clientCtx.AddressCodec.BytesToString(granter)
-			if err != nil {
-				return err
-			}
 			sl, err := cmd.Flags().GetString(FlagSpendLimit)
 			if err != nil {
 				return err
@@ -137,11 +133,11 @@ Examples:
 				}
 
 				if periodClock <= 0 {
-					return errors.New("period clock was not set")
+					return fmt.Errorf("period clock was not set")
 				}
 
 				if periodLimit == nil {
-					return errors.New("period limit was not set")
+					return fmt.Errorf("period limit was not set")
 				}
 
 				periodReset := getPeriodReset(periodClock)
@@ -152,6 +148,7 @@ Examples:
 				periodic := feegrant.PeriodicAllowance{
 					Basic:            basic,
 					Period:           getPeriod(periodClock),
+					PeriodReset:      getPeriodReset(periodClock),
 					PeriodSpendLimit: periodLimit,
 					PeriodCanSpend:   periodLimit,
 				}
@@ -171,7 +168,7 @@ Examples:
 				}
 			}
 
-			msg, err := feegrant.NewMsgGrantAllowance(grant, granterStr, args[1])
+			msg, err := feegrant.NewMsgGrantAllowance(grant, granter, grantee)
 			if err != nil {
 				return err
 			}
@@ -184,7 +181,7 @@ Examples:
 	cmd.Flags().StringSlice(FlagAllowedMsgs, []string{}, "Set of allowed messages for fee allowance")
 	cmd.Flags().String(FlagExpiration, "", "The RFC 3339 timestamp after which the grant expires for the user")
 	cmd.Flags().String(FlagSpendLimit, "", "Spend limit specifies the max limit can be used, if not mentioned there is no limit")
-	cmd.Flags().Int64(FlagPeriod, 0, "period specifies the time duration(in seconds) in which period_limit coins can be spent before that allowance is reset (ex: 3600)")
+	cmd.Flags().Int64(FlagPeriod, 0, "period specifies the time duration (in seconds) in which period_limit coins can be spent before that allowance is reset (ex: 3600)")
 	cmd.Flags().String(FlagPeriodLimit, "", "period limit specifies the maximum number of coins that can be spent in the period")
 
 	return cmd

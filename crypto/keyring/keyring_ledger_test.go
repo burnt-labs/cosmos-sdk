@@ -1,13 +1,12 @@
 //go:build ledger || test_ledger_mock
-// +build ledger test_ledger_mock
 
 package keyring
 
 import (
 	"bytes"
-	"errors"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

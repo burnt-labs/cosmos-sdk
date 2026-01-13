@@ -1,15 +1,12 @@
 package ante_test
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
-	appmodulev2 "cosmossdk.io/core/appmodule/v2"
-	"cosmossdk.io/core/header"
 	storetypes "cosmossdk.io/store/types"
 
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
@@ -40,7 +37,7 @@ func TestValidateBasic(t *testing.T) {
 	invalidTx, err := suite.CreateTestTx(suite.ctx, privs, accNums, accSeqs, suite.ctx.ChainID(), signing.SignMode_SIGN_MODE_DIRECT)
 	require.NoError(t, err)
 
-	vbd := ante.NewValidateBasicDecorator(suite.accountKeeper.GetEnvironment())
+	vbd := ante.NewValidateBasicDecorator()
 	antehandler := sdk.ChainAnteDecorators(vbd)
 	_, err = antehandler(suite.ctx, invalidTx, false)
 
@@ -51,7 +48,7 @@ func TestValidateBasic(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = antehandler(suite.ctx, validTx, false)
-	require.Nil(t, err, "ValidateBasicDecorator returned error on valid tx. err: %v", err)
+	require.NoError(t, err, "ValidateBasicDecorator returned error on valid tx. err: %v", err)
 
 	// test decorator skips on recheck
 	suite.ctx = suite.ctx.WithIsReCheckTx(true)
@@ -59,7 +56,7 @@ func TestValidateBasic(t *testing.T) {
 	// decorator should skip processing invalidTx on recheck and thus return nil-error
 	_, err = antehandler(suite.ctx, invalidTx, false)
 
-	require.Nil(t, err, "ValidateBasicDecorator ran on ReCheck")
+	require.NoError(t, err, "ValidateBasicDecorator ran on ReCheck")
 }
 
 func TestValidateMemo(t *testing.T) {
@@ -95,12 +92,10 @@ func TestValidateMemo(t *testing.T) {
 
 	// require small memos pass ValidateMemo Decorator
 	_, err = antehandler(suite.ctx, validTx, false)
-	require.Nil(t, err, "ValidateBasicDecorator returned error on valid tx. err: %v", err)
+	require.NoError(t, err, "ValidateMemoDecorator returned error on valid tx. err: %v", err)
 }
 
 func TestConsumeGasForTxSize(t *testing.T) {
-	t.Skip() // TO FIX BEFORE 0.52 FINAL.
-
 	suite := SetupTestSuite(t, true)
 
 	// keys and addresses
@@ -118,7 +113,7 @@ func TestConsumeGasForTxSize(t *testing.T) {
 		name  string
 		sigV2 signing.SignatureV2
 	}{
-		{"SingleSignatureData", signing.SignatureV2{PubKey: priv1.PubKey(), Data: &signing.SingleSignatureData{}}}, // single signature
+		{"SingleSignatureData", signing.SignatureV2{PubKey: priv1.PubKey()}},
 		{"MultiSignatureData", signing.SignatureV2{PubKey: priv1.PubKey(), Data: multisig.NewMultisig(2)}},
 	}
 
@@ -135,7 +130,7 @@ func TestConsumeGasForTxSize(t *testing.T) {
 			require.NoError(t, err)
 
 			txBytes, err := suite.clientCtx.TxConfig.TxJSONEncoder()(tx)
-			require.Nil(t, err, "Cannot marshal tx: %v", err)
+			require.NoError(t, err, "Cannot marshal tx: %v", err)
 
 			params := suite.accountKeeper.GetParams(suite.ctx)
 			expectedGas := storetypes.Gas(len(txBytes)) * params.TxSizeCostPerByte
@@ -151,7 +146,7 @@ func TestConsumeGasForTxSize(t *testing.T) {
 
 			beforeGas = suite.ctx.GasMeter().GasConsumed()
 			suite.ctx, err = antehandler(suite.ctx, tx, false)
-			require.Nil(t, err, "ConsumeTxSizeGasDecorator returned error: %v", err)
+			require.NoError(t, err, "ConsumeTxSizeGasDecorator returned error: %v", err)
 
 			// require that decorator consumes expected amount of gas
 			consumedGas := suite.ctx.GasMeter().GasConsumed() - beforeGas
@@ -164,13 +159,12 @@ func TestConsumeGasForTxSize(t *testing.T) {
 			tx = txBuilder.GetTx()
 
 			simTxBytes, err := suite.clientCtx.TxConfig.TxJSONEncoder()(tx)
-			require.Nil(t, err, "Cannot marshal tx: %v", err)
+			require.NoError(t, err, "Cannot marshal tx: %v", err)
 			// require that simulated tx is smaller than tx with signatures
 			require.True(t, len(simTxBytes) < len(txBytes), "simulated tx still has signatures")
 
 			// Set suite.ctx with smaller simulated TxBytes manually
 			suite.ctx = suite.ctx.WithTxBytes(simTxBytes)
-			suite.ctx = suite.ctx.WithExecMode(sdk.ExecModeSimulate)
 
 			beforeSimGas := suite.ctx.GasMeter().GasConsumed()
 
@@ -179,17 +173,16 @@ func TestConsumeGasForTxSize(t *testing.T) {
 			consumedSimGas := suite.ctx.GasMeter().GasConsumed() - beforeSimGas
 
 			// require that antehandler passes and does not underestimate decorator cost
-			require.Nil(t, err, "ConsumeTxSizeGasDecorator returned error: %v", err)
+			require.NoError(t, err, "ConsumeTxSizeGasDecorator returned error: %v", err)
 			require.True(t, consumedSimGas >= expectedGas, "Simulate mode underestimates gas on AnteDecorator. Simulated cost: %d, expected cost: %d", consumedSimGas, expectedGas)
 		})
 	}
 }
 
-func TestTxHeightTimeoutDecorator(t *testing.T) {
+func TestTxTimeoutHeightDecorator(t *testing.T) {
 	suite := SetupTestSuite(t, true)
 
-	mockHeaderService := &mockHeaderService{}
-	antehandler := sdk.ChainAnteDecorators(ante.NewTxTimeoutHeightDecorator(appmodulev2.Environment{HeaderService: mockHeaderService}))
+	antehandler := sdk.ChainAnteDecorators(ante.NewTxTimeoutHeightDecorator())
 
 	// keys and addresses
 	priv1, _, addr1 := testdata.KeyTestPubAddr()
@@ -236,28 +229,9 @@ func TestTxHeightTimeoutDecorator(t *testing.T) {
 			tx, err := suite.CreateTestTx(suite.ctx, privs, accNums, accSeqs, suite.ctx.ChainID(), signing.SignMode_SIGN_MODE_DIRECT)
 			require.NoError(t, err)
 
-			mockHeaderService.WithBlockHeight(tc.height)
-			mockHeaderService.WithBlockTime(tc.timestamp)
-			_, err = antehandler(suite.ctx, tx, true)
+			ctx := suite.ctx.WithBlockHeight(tc.height).WithBlockTime(tc.timestamp)
+			_, err = antehandler(ctx, tx, true)
 			require.ErrorIs(t, err, tc.expectedErr)
 		})
 	}
-}
-
-type mockHeaderService struct {
-	header.Service
-
-	exp header.Info
-}
-
-func (m *mockHeaderService) HeaderInfo(_ context.Context) header.Info {
-	return m.exp
-}
-
-func (m *mockHeaderService) WithBlockHeight(height int64) {
-	m.exp.Height = height
-}
-
-func (m *mockHeaderService) WithBlockTime(blocktime time.Time) {
-	m.exp.Time = blocktime
 }

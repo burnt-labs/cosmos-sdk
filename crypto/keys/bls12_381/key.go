@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/cometbft/cometbft/crypto"
+	bls "github.com/cometbft/cometbft/crypto/bls12381"
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
@@ -54,7 +55,7 @@ func (privKey PrivKey) Equals(other cryptotypes.LedgerPrivKey) bool {
 
 // Type returns the type.
 func (PrivKey) Type() string {
-	return KeyType
+	return bls.KeyType
 }
 
 // Sign signs the given byte array. If msg is larger than
@@ -70,7 +71,7 @@ func (privKey PrivKey) MarshalAmino() ([]byte, error) {
 
 // UnmarshalAmino overrides Amino binary marshaling.
 func (privKey *PrivKey) UnmarshalAmino(bz []byte) error {
-	if len(bz) != PrivKeySize {
+	if len(bz) != bls.PrivKeySize {
 		return errors.New("invalid privkey size")
 	}
 	privKey.Key = bz
@@ -108,7 +109,7 @@ func (pubKey PubKey) Address() crypto.Address {
 }
 
 // VerifySignature verifies the given signature.
-func (pubKey PubKey) VerifySignature(msg, sig []byte) bool {
+func (pubKey PubKey) VerifySignature(_, _ []byte) bool {
 	panic("not implemented, build flags are required to use bls12_381 keys")
 }
 
@@ -119,7 +120,7 @@ func (pubKey PubKey) Bytes() []byte {
 
 // Type returns the key's type.
 func (PubKey) Type() string {
-	return KeyType
+	return bls.KeyType
 }
 
 // Equals returns true if the other's type is the same and their bytes are deeply equal.
@@ -127,7 +128,7 @@ func (pubKey PubKey) Equals(other cryptotypes.PubKey) bool {
 	return pubKey.Type() == other.Type() && bytes.Equal(pubKey.Bytes(), other.Bytes())
 }
 
-// String returns Hex representation of a pubkey with it's type
+// String returns Hex representation of a pubkey with its type
 func (pubKey PubKey) String() string {
 	return fmt.Sprintf("PubKeyBLS12_381{%X}", pubKey.Key)
 }

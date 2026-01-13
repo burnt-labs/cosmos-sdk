@@ -10,12 +10,12 @@ import (
 	"regexp"
 	"strings"
 
-	"cosmossdk.io/x/upgrade/internal/conv"
+	"github.com/cosmos/cosmos-sdk/x/upgrade/internal/conv"
 )
 
 // Info is the special structure that the Plan.Info string can be (as json).
 type Info struct {
-	parseConfig ParseConfig
+	parseConfig ParseConfig `json:"-"`
 
 	Binaries BinaryDownloadURLMap `json:"binaries"`
 }

@@ -2,10 +2,11 @@ package tx
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	gogogrpc "github.com/cosmos/gogoproto/grpc"
-	"github.com/golang/protobuf/proto" //nolint:staticcheck // keep legacy for now
+	"github.com/golang/protobuf/proto" //nolint:staticcheck // needed for testing
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -42,7 +43,7 @@ func NewTxServer(clientCtx client.Context, simulate baseAppSimulateFn, interface
 var _ txtypes.ServiceServer = txServer{}
 
 // GetTxsEvent implements the ServiceServer.TxsByEvents RPC method.
-func (s txServer) GetTxsEvent(ctx context.Context, req *txtypes.GetTxsEventRequest) (*txtypes.GetTxsEventResponse, error) {
+func (s txServer) GetTxsEvent(_ context.Context, req *txtypes.GetTxsEventRequest) (*txtypes.GetTxsEventResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request cannot be nil")
 	}
@@ -58,7 +59,7 @@ func (s txServer) GetTxsEvent(ctx context.Context, req *txtypes.GetTxsEventReque
 	for i, tx := range result.Txs {
 		protoTx, ok := tx.Tx.GetCachedValue().(*txtypes.Tx)
 		if !ok {
-			return nil, status.Errorf(codes.Internal, "getting cached value failed expected %T, got %T", txtypes.Tx{}, tx.Tx.GetCachedValue())
+			return nil, status.Errorf(codes.Internal, "expected %T, got %T", txtypes.Tx{}, tx.Tx.GetCachedValue())
 		}
 
 		txsList[i] = protoTx
@@ -72,7 +73,7 @@ func (s txServer) GetTxsEvent(ctx context.Context, req *txtypes.GetTxsEventReque
 }
 
 // Simulate implements the ServiceServer.Simulate RPC method.
-func (s txServer) Simulate(ctx context.Context, req *txtypes.SimulateRequest) (*txtypes.SimulateResponse, error) {
+func (s txServer) Simulate(_ context.Context, req *txtypes.SimulateRequest) (*txtypes.SimulateResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid empty tx")
 	}
@@ -106,7 +107,7 @@ func (s txServer) Simulate(ctx context.Context, req *txtypes.SimulateRequest) (*
 }
 
 // GetTx implements the ServiceServer.GetTx RPC method.
-func (s txServer) GetTx(ctx context.Context, req *txtypes.GetTxRequest) (*txtypes.GetTxResponse, error) {
+func (s txServer) GetTx(_ context.Context, req *txtypes.GetTxRequest) (*txtypes.GetTxResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request cannot be nil")
 	}
@@ -115,6 +116,8 @@ func (s txServer) GetTx(ctx context.Context, req *txtypes.GetTxRequest) (*txtype
 		return nil, status.Error(codes.InvalidArgument, "tx hash cannot be empty")
 	}
 
+	// TODO We should also check the proof flag in gRPC header.
+	// https://github.com/cosmos/cosmos-sdk/issues/7036.
 	result, err := QueryTx(s.clientCtx, req.Hash)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
@@ -135,6 +138,13 @@ func (s txServer) GetTx(ctx context.Context, req *txtypes.GetTxRequest) (*txtype
 	}, nil
 }
 
+// protoTxProvider is a type which can provide a proto transaction. It is a
+// workaround to get access to the wrapper TxBuilder's method GetProtoTx().
+// ref: https://github.com/cosmos/cosmos-sdk/issues/10347
+type protoTxProvider interface {
+	GetProtoTx() *txtypes.Tx
+}
+
 // GetBlockWithTxs returns a block with decoded txs.
 func (s txServer) GetBlockWithTxs(ctx context.Context, req *txtypes.GetBlockWithTxsRequest) (*txtypes.GetBlockWithTxsResponse, error) {
 	if req == nil {
@@ -149,12 +159,7 @@ func (s txServer) GetBlockWithTxs(ctx context.Context, req *txtypes.GetBlockWith
 			"or greater than the current height %d", req.Height, currentHeight)
 	}
 
-	node, err := s.clientCtx.GetNode()
-	if err != nil {
-		return nil, err
-	}
-
-	blockID, block, err := cmtservice.GetProtoBlock(ctx, node, &req.Height)
+	blockID, block, err := cmtservice.GetProtoBlock(ctx, s.clientCtx, &req.Height)
 	if err != nil {
 		return nil, err
 	}
@@ -180,11 +185,11 @@ func (s txServer) GetBlockWithTxs(ctx context.Context, req *txtypes.GetBlockWith
 		if err != nil {
 			return err
 		}
-		p, err := txb.(interface{ AsTx() (*txtypes.Tx, error) }).AsTx()
-		if err != nil {
-			return err
+		p, ok := txb.(protoTxProvider)
+		if !ok {
+			return sdkerrors.ErrTxDecode.Wrapf("could not cast %T to %T", txb, txtypes.Tx{})
 		}
-		txs = append(txs, p)
+		txs = append(txs, p.GetProtoTx())
 		return nil
 	}
 	if req.Pagination != nil && req.Pagination.Reverse {
@@ -222,23 +227,9 @@ func (s txServer) TxEncode(_ context.Context, req *txtypes.TxEncodeRequest) (*tx
 		return nil, status.Error(codes.InvalidArgument, "invalid empty tx")
 	}
 
-	bodyBytes, err := s.clientCtx.Codec.Marshal(req.Tx.Body)
-	if err != nil {
-		return nil, err
-	}
+	txBuilder := &wrapper{tx: req.Tx}
 
-	authInfoBytes, err := s.clientCtx.Codec.Marshal(req.Tx.AuthInfo)
-	if err != nil {
-		return nil, err
-	}
-
-	raw := &txtypes.TxRaw{
-		BodyBytes:     bodyBytes,
-		AuthInfoBytes: authInfoBytes,
-		Signatures:    req.Tx.Signatures,
-	}
-
-	encodedBytes, err := s.clientCtx.Codec.Marshal(raw)
+	encodedBytes, err := s.clientCtx.TxConfig.TxEncoder()(txBuilder)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +245,7 @@ func (s txServer) TxEncodeAmino(_ context.Context, req *txtypes.TxEncodeAminoReq
 		return nil, status.Error(codes.InvalidArgument, "invalid empty tx json")
 	}
 
-	var stdTx legacytx.StdTx
+	var stdTx legacytx.StdTx // nolint:staticcheck // legacy testing
 	err := s.clientCtx.LegacyAmino.UnmarshalJSON([]byte(req.AminoJson), &stdTx)
 	if err != nil {
 		return nil, err
@@ -281,13 +272,14 @@ func (s txServer) TxDecode(_ context.Context, req *txtypes.TxDecodeRequest) (*tx
 		return nil, err
 	}
 
-	tx, err := txb.(interface{ AsTx() (*txtypes.Tx, error) }).AsTx() // TODO: maybe we can break the Tx interface to add this also
-	if err != nil {
-		return nil, err
+	txWrapper, ok := txb.(*wrapper)
+	if ok {
+		return &txtypes.TxDecodeResponse{
+			Tx: txWrapper.tx,
+		}, nil
 	}
-	return &txtypes.TxDecodeResponse{
-		Tx: tx,
-	}, nil
+
+	return nil, fmt.Errorf("expected %T, got %T", &wrapper{}, txb)
 }
 
 // TxDecodeAmino implements the ServiceServer.TxDecodeAmino RPC method.
@@ -296,7 +288,7 @@ func (s txServer) TxDecodeAmino(_ context.Context, req *txtypes.TxDecodeAminoReq
 		return nil, status.Error(codes.InvalidArgument, "invalid empty tx bytes")
 	}
 
-	var stdTx legacytx.StdTx
+	var stdTx legacytx.StdTx // nolint:staticcheck // legacy testing
 	err := s.clientCtx.LegacyAmino.Unmarshal(req.AminoBinary, &stdTx)
 	if err != nil {
 		return nil, err
@@ -328,10 +320,7 @@ func RegisterTxService(
 // RegisterGRPCGatewayRoutes mounts the tx service's GRPC-gateway routes on the
 // given Mux.
 func RegisterGRPCGatewayRoutes(clientConn gogogrpc.ClientConn, mux *runtime.ServeMux) {
-	err := txtypes.RegisterServiceHandlerClient(context.Background(), mux, txtypes.NewServiceClient(clientConn))
-	if err != nil {
-		panic(err)
-	}
+	_ = txtypes.RegisterServiceHandlerClient(context.Background(), mux, txtypes.NewServiceClient(clientConn))
 }
 
 func parseOrderBy(orderBy txtypes.OrderBy) string {

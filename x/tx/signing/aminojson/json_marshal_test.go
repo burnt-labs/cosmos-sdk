@@ -1,7 +1,6 @@
 package aminojson_test
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -266,7 +265,6 @@ func TestIndent(t *testing.T) {
 
 	bz, err := encoder.Marshal(msg)
 	require.NoError(t, err)
-	fmt.Println(string(bz))
 	require.Equal(t, `{
 	"type": "ABitOfEverything",
 	"value": {
@@ -325,7 +323,6 @@ func TestEnumAsString(t *testing.T) {
 
 	bz, err := encoder.Marshal(msg)
 	require.NoError(t, err)
-	fmt.Println(string(bz))
 	require.Equal(t, `{
 	"type": "ABitOfEverything",
 	"value": {
@@ -384,7 +381,6 @@ func TestAminoNameAsTypeURL(t *testing.T) {
 
 	bz, err := encoder.Marshal(msg)
 	require.NoError(t, err)
-	fmt.Println(string(bz))
 	require.Equal(t, `{
 	"type": "/testpb.ABitOfEverything",
 	"value": {
@@ -416,32 +412,28 @@ func TestAminoNameAsTypeURL(t *testing.T) {
 }`, string(bz))
 }
 
-func TestCustomBytesEncoder(t *testing.T) {
-	cdc := amino.NewCodec()
-	cdc.RegisterConcrete(&testpb.ABitOfEverything{}, "ABitOfEverything", nil)
-	encoder := aminojson.NewEncoder(aminojson.EncoderOptions{})
+func TestMarshalMappings(t *testing.T) {
+	// valid
+	encoder := aminojson.NewEncoder(aminojson.EncoderOptions{Indent: "	", MarshalMappings: true})
 
-	bz := sha256.Sum256([]byte("test"))
-
-	msg := &testpb.ABitOfEverything{
-		Bytes:       bz[:],
-		PrettyBytes: bz[:],
+	msg := &testpb.WithAMap{
+		StrMap: map[string]string{
+			"foo": "bar",
+			"baz": "qux",
+		},
 	}
 
-	legacyJSON, err := cdc.MarshalJSON(msg)
+	bz, err := encoder.Marshal(msg)
 	require.NoError(t, err)
-	aminoJSON, err := encoder.Marshal(msg)
-	require.NoError(t, err)
-	require.Equal(t, string(legacyJSON), string(aminoJSON))
+	require.Equal(t, `{
+	"str_map": {
+		"baz": "qux",
+		"foo": "bar"
+	}
+}`, string(bz))
 
-	encoder.DefineFieldEncoding(
-		"hex",
-		func(enc *aminojson.Encoder, v protoreflect.Value, w io.Writer) error {
-			_, err := fmt.Fprintf(w, "\"%x\"", v.Bytes())
-			return err
-		})
-	aminoJSON, err = encoder.Marshal(msg)
-	require.NoError(t, err)
-	require.NotEqual(t, string(legacyJSON), string(aminoJSON))
-	t.Logf("hex encoded bytes: %s", string(aminoJSON))
+	// invalid
+	encoder = aminojson.NewEncoder(aminojson.EncoderOptions{Indent: "	", MarshalMappings: false})
+	_, err = encoder.Marshal(msg)
+	require.Error(t, err)
 }

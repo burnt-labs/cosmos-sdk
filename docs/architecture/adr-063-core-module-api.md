@@ -192,8 +192,6 @@ func NewKeeper(logger log.Logger) Keeper {
 }
 ```
 
-```
-
 ### Core `AppModule` extension interfaces
 
 
@@ -226,7 +224,7 @@ type HasServices interface {
 
 ```
 
-Because of the `cosmos.msg.v1.service` protobuf option, required for `Msg` services, the same `ServiceRegitrar` can be
+Because of the `cosmos.msg.v1.service` protobuf option, required for `Msg` services, the same `ServiceRegistrar` can be
 used to register both `Msg` and query services.
 
 #### Genesis
@@ -294,7 +292,7 @@ type HasPreBlocker interface {
 #### Begin and End Blockers
 
 Modules that have functionality that runs before transactions (begin blockers) or after transactions
-(end blockers) should implement the `HasBeginBlocker` and/or `HasEndBlocker` interfaces:
+(end blockers) should implement the has `HasBeginBlocker` and/or `HasEndBlocker` interfaces:
 
 ```go
 type HasBeginBlocker interface {
@@ -330,7 +328,7 @@ Header Service defines a way to get header information about a block. This infor
 ```go 
 
 type Service interface {
-	HeaderInfo(context.Context) Info
+	GetHeaderInfo(context.Context) Info
 }
 
 type Info struct {
@@ -408,7 +406,7 @@ which modules can return in a provider:
 
 ```go
 func ProvideGrpcGateway() GrpcGatewayInfo {
-    return GrpcGatewayinfo {
+    return GrpcGatewayInfo {
         Handlers: []Handler {types.RegisterQueryHandlerClient}
     }
 }
@@ -452,7 +450,7 @@ func ProvideApp(config *foomodulev2.Module, evtSvc event.EventService, db orm.Mo
 The `core` module will define a static integer var, `cosmossdk.io/core.RuntimeCompatibilityVersion`, which is
 a minor version indicator of the core module that is accessible at runtime. Correct runtime module implementations
 should check this compatibility version and return an error if the current `RuntimeCompatibilityVersion` is higher
-than the version of the core API that this runtime version can support. When new features are added to the `core`
+than the version of the core API that this runtime version can support. When new features are adding to the `core`
 module API that runtime modules are required to support, this version should be incremented.
 
 ### Runtime Modules
@@ -496,7 +494,7 @@ a dependency on `github.com/cosmos/cosmos-sdk` would no longer be required.
 In short, modules would depend primarily on `cosmossdk.io/core`, and each `cosmossdk.io/runtime/{consensus-engine}`
 would implement the `cosmossdk.io/core` functionality for that consensus engine.
 
-On additional piece that would need to be resolved as part of this architecture is how runtimes relate to the server.
+One additional piece that would need to be resolved as part of this architecture is how runtimes relate to the server.
 Likely it would make sense to modularize the current server architecture so that it can be used with any runtime even
 if that is based on a consensus engine besides Comet. This means that eventually the Comet runtime would need to
 encapsulate the logic for starting Comet and the ABCI app.

@@ -4,8 +4,9 @@ import (
 	"context"
 	crand "crypto/rand" // #nosec // crypto/rand is used for seed generation
 	"encoding/binary"
-	"errors"
+	"fmt"
 	"math/rand" // #nosec // math/rand is used for random selection and seeded from crypto/rand
+	"slices"
 	"sync"
 
 	"github.com/huandu/skiplist"
@@ -15,8 +16,8 @@ import (
 )
 
 var (
-	_ Mempool  = (*SenderNonceMempool)(nil)
-	_ Iterator = (*senderNonceMempoolIterator)(nil)
+	_ ExtMempool = (*SenderNonceMempool)(nil)
+	_ Iterator   = (*senderNonceMempoolIterator)(nil)
 )
 
 var DefaultMaxTx = -1
@@ -132,26 +133,20 @@ func (snm *SenderNonceMempool) Insert(_ context.Context, tx sdk.Tx) error {
 		return err
 	}
 	if len(sigs) == 0 {
-		return errors.New("tx must have at least one signer")
+		return fmt.Errorf("tx must have at least one signer")
 	}
 
 	sig := sigs[0]
 	sender := sdk.AccAddress(sig.PubKey.Address()).String()
-	nonce := sig.Sequence
+	nonce, err := ChooseNonce(sig.Sequence, tx)
+	if err != nil {
+		return err
+	}
 
 	senderTxs, found := snm.senders[sender]
 	if !found {
 		senderTxs = skiplist.New(skiplist.Uint64)
 		snm.senders[sender] = senderTxs
-	}
-
-	// if it's an unordered tx, we use the gas instead of the nonce
-	if unordered, ok := tx.(sdk.TxWithUnordered); ok && unordered.GetUnordered() {
-		gasLimit, err := unordered.GetGasLimit()
-		nonce = gasLimit
-		if err != nil {
-			return err
-		}
 	}
 
 	senderTxs.Set(nonce, tx)
@@ -162,18 +157,18 @@ func (snm *SenderNonceMempool) Insert(_ context.Context, tx sdk.Tx) error {
 	return nil
 }
 
-// Select returns an iterator ordering transactions the mempool with the lowest
-// nonce of a random selected sender first.
+// Select returns an iterator ordering transactions in the mempool with the lowest
+// nonce of a randomly selected sender first.
 //
 // NOTE: It is not safe to use this iterator while removing transactions from
 // the underlying mempool.
-func (snm *SenderNonceMempool) Select(ctx context.Context, txs []sdk.Tx) Iterator {
+func (snm *SenderNonceMempool) Select(ctx context.Context, txs [][]byte) Iterator {
 	snm.mtx.Lock()
 	defer snm.mtx.Unlock()
 	return snm.doSelect(ctx, txs)
 }
 
-func (snm *SenderNonceMempool) doSelect(_ context.Context, _ []sdk.Tx) Iterator {
+func (snm *SenderNonceMempool) doSelect(_ context.Context, _ [][]byte) Iterator {
 	var senders []string
 
 	senderCursors := make(map[string]*skiplist.Element)
@@ -202,7 +197,7 @@ func (snm *SenderNonceMempool) doSelect(_ context.Context, _ []sdk.Tx) Iterator 
 }
 
 // SelectBy will hold the mutex during the iteration, callback returns if continue.
-func (snm *SenderNonceMempool) SelectBy(ctx context.Context, txs []sdk.Tx, callback func(sdk.Tx) bool) {
+func (snm *SenderNonceMempool) SelectBy(ctx context.Context, txs [][]byte, callback func(sdk.Tx) bool) {
 	snm.mtx.Lock()
 	defer snm.mtx.Unlock()
 
@@ -229,20 +224,14 @@ func (snm *SenderNonceMempool) Remove(tx sdk.Tx) error {
 		return err
 	}
 	if len(sigs) == 0 {
-		return errors.New("tx must have at least one signer")
+		return fmt.Errorf("tx must have at least one signer")
 	}
 
 	sig := sigs[0]
 	sender := sdk.AccAddress(sig.PubKey.Address()).String()
-	nonce := sig.Sequence
-
-	// if it's an unordered tx, we use the gas instead of the nonce
-	if unordered, ok := tx.(sdk.TxWithUnordered); ok && unordered.GetUnordered() {
-		gasLimit, err := unordered.GetGasLimit()
-		nonce = gasLimit
-		if err != nil {
-			return err
-		}
+	nonce, err := ChooseNonce(sig.Sequence, tx)
+	if err != nil {
+		return err
 	}
 
 	senderTxs, found := snm.senders[sender]
@@ -306,5 +295,5 @@ func (i *senderNonceMempoolIterator) Tx() sdk.Tx {
 }
 
 func removeAtIndex[T any](slice []T, index int) []T {
-	return append(slice[:index], slice[index+1:]...)
+	return slices.Delete(slice, index, index+1)
 }

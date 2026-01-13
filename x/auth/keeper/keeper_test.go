@@ -1,20 +1,20 @@
 package keeper_test
 
 import (
-	"context"
-	"encoding/binary"
 	"testing"
 
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
+	cmttime "github.com/cometbft/cometbft/types/time"
+	gogotypes "github.com/cosmos/gogoproto/types"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/mock/gomock"
 
+	"cosmossdk.io/collections"
 	"cosmossdk.io/core/header"
-	coretesting "cosmossdk.io/core/testing"
+	"cosmossdk.io/core/store"
 	storetypes "cosmossdk.io/store/types"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
-	codectestutil "github.com/cosmos/cosmos-sdk/codec/testutil"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
 	"github.com/cosmos/cosmos-sdk/runtime"
@@ -24,7 +24,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/auth"
 	authcodec "github.com/cosmos/cosmos-sdk/x/auth/codec"
 	"github.com/cosmos/cosmos-sdk/x/auth/keeper"
-	authtestutil "github.com/cosmos/cosmos-sdk/x/auth/testutil"
 	"github.com/cosmos/cosmos-sdk/x/auth/types"
 )
 
@@ -39,39 +38,8 @@ var (
 	randomPermAcc = types.NewEmptyModuleAccount(randomPerm, "random")
 )
 
-type KeeperTestSuite struct {
-	suite.Suite
-
-	ctx sdk.Context
-
-	queryClient    types.QueryClient
-	accountKeeper  keeper.AccountKeeper
-	acctsModKeeper *authtestutil.MockAccountsModKeeper
-	msgServer      types.MsgServer
-	encCfg         moduletestutil.TestEncodingConfig
-}
-
-func (suite *KeeperTestSuite) SetupTest() {
-	suite.encCfg = moduletestutil.MakeTestEncodingConfig(codectestutil.CodecOptions{}, auth.AppModule{})
-
-	key := storetypes.NewKVStoreKey(types.StoreKey)
-	storeService := runtime.NewKVStoreService(key)
-	env := runtime.NewEnvironment(storeService, coretesting.NewNopLogger())
-	testCtx := testutil.DefaultContextWithDB(suite.T(), key, storetypes.NewTransientStoreKey("transient_test"))
-	suite.ctx = testCtx.Ctx.WithHeaderInfo(header.Info{})
-
-	// gomock initializations
-	ctrl := gomock.NewController(suite.T())
-	acctsModKeeper := authtestutil.NewMockAccountsModKeeper(ctrl)
-	suite.acctsModKeeper = acctsModKeeper
-	accNum := uint64(0)
-	suite.acctsModKeeper.EXPECT().NextAccountNumber(gomock.Any()).AnyTimes().DoAndReturn(func(ctx context.Context) (uint64, error) {
-		currNum := accNum
-		accNum++
-		return currNum, nil
-	})
-
-	maccPerms := map[string][]string{
+func getMaccPerms() map[string][]string {
+	return map[string][]string{
 		"fee_collector":          nil,
 		"mint":                   {"minter"},
 		"bonded_tokens_pool":     {"burner", "staking"},
@@ -79,13 +47,32 @@ func (suite *KeeperTestSuite) SetupTest() {
 		multiPerm:                {"burner", "minter", "staking"},
 		randomPerm:               {"random"},
 	}
+}
+
+type KeeperTestSuite struct {
+	suite.Suite
+
+	ctx sdk.Context
+
+	queryClient   types.QueryClient
+	accountKeeper keeper.AccountKeeper
+	msgServer     types.MsgServer
+	encCfg        moduletestutil.TestEncodingConfig
+}
+
+func (suite *KeeperTestSuite) SetupTest() {
+	suite.encCfg = moduletestutil.MakeTestEncodingConfig(auth.AppModuleBasic{})
+
+	key := storetypes.NewKVStoreKey(types.StoreKey)
+	storeService := runtime.NewKVStoreService(key)
+	testCtx := testutil.DefaultContextWithDB(suite.T(), key, storetypes.NewTransientStoreKey("transient_test"))
+	suite.ctx = testCtx.Ctx.WithHeaderInfo(header.Info{})
 
 	suite.accountKeeper = keeper.NewAccountKeeper(
-		env,
 		suite.encCfg.Codec,
+		storeService,
 		types.ProtoBaseAccount,
-		acctsModKeeper,
-		maccPerms,
+		getMaccPerms(),
 		authcodec.NewBech32Codec("cosmos"),
 		"cosmos",
 		types.NewModuleAddress("gov").String(),
@@ -128,8 +115,7 @@ func (suite *KeeperTestSuite) TestInitGenesis() {
 	}
 
 	ctx := suite.ctx
-	err := suite.accountKeeper.InitGenesis(ctx, genState)
-	require.NoError(suite.T(), err)
+	suite.accountKeeper.InitGenesis(ctx, genState)
 
 	params := suite.accountKeeper.GetParams(ctx)
 	suite.Require().Equal(genState.Params.MaxMemoCharacters, params.MaxMemoCharacters, "MaxMemoCharacters")
@@ -175,15 +161,9 @@ func (suite *KeeperTestSuite) TestInitGenesis() {
 		genState.Accounts = append(genState.Accounts, codectypes.UnsafePackAny(acct))
 	}
 
-	err = suite.accountKeeper.InitGenesis(ctx, genState)
-	require.NoError(suite.T(), err)
+	suite.accountKeeper.InitGenesis(ctx, genState)
 
-	var keeperAccts []sdk.AccountI
-	err = suite.accountKeeper.Accounts.Walk(ctx, nil, func(_ sdk.AccAddress, value sdk.AccountI) (stop bool, err error) {
-		keeperAccts = append(keeperAccts, value)
-		return false, nil
-	})
-	require.NoError(suite.T(), err)
+	keeperAccts := suite.accountKeeper.GetAllAccounts(ctx)
 	// len(accts)+1 because we initialize fee_collector account after the genState accounts
 	suite.Require().Equal(len(keeperAccts), len(accts)+1, "number of accounts in the keeper vs in genesis state")
 	for i, genAcct := range accts {
@@ -210,8 +190,7 @@ func (suite *KeeperTestSuite) TestInitGenesis() {
 	suite.Require().Equal(6, int(feeCollector.GetAccountNumber()))
 
 	// The 3rd account has account number 5, but because the FeeCollector account gets initialized last, the next should be 7.
-	nextNum, err := suite.accountKeeper.AccountsModKeeper.NextAccountNumber(ctx)
-	suite.Require().NoError(err)
+	nextNum := suite.accountKeeper.NextAccountNumber(ctx)
 	suite.Require().Equal(7, int(nextNum))
 
 	suite.SetupTest() // reset
@@ -229,15 +208,9 @@ func (suite *KeeperTestSuite) TestInitGenesis() {
 		},
 	}
 
-	err = suite.accountKeeper.InitGenesis(ctx, genState)
-	require.NoError(suite.T(), err)
+	suite.accountKeeper.InitGenesis(ctx, genState)
 
-	keeperAccts = nil
-	err = suite.accountKeeper.Accounts.Walk(ctx, nil, func(_ sdk.AccAddress, value sdk.AccountI) (stop bool, err error) {
-		keeperAccts = append(keeperAccts, value)
-		return false, nil
-	})
-	require.NoError(suite.T(), err)
+	keeperAccts = suite.accountKeeper.GetAllAccounts(ctx)
 	// len(genState.Accounts)+1 because we initialize fee_collector as account number 1 (last)
 	suite.Require().Equal(len(keeperAccts), len(genState.Accounts)+1, "number of accounts in the keeper vs in genesis state")
 
@@ -246,37 +219,108 @@ func (suite *KeeperTestSuite) TestInitGenesis() {
 	feeCollector = suite.accountKeeper.GetModuleAccount(ctx, "fee_collector")
 	suite.Require().Equal(1, int(feeCollector.GetAccountNumber()))
 
-	nextNum, err = suite.accountKeeper.AccountsModKeeper.NextAccountNumber(ctx)
-	suite.Require().NoError(err)
+	nextNum = suite.accountKeeper.NextAccountNumber(ctx)
 	// we expect nextNum to be 2 because we initialize fee_collector as account number 1
 	suite.Require().Equal(2, int(nextNum))
 }
 
-func (suite *KeeperTestSuite) TestMigrateAccountNumberUnsafe() {
-	suite.SetupTest() // reset
+func setupAccountKeeper(t *testing.T) (sdk.Context, keeper.AccountKeeper, store.KVStoreService) {
+	t.Helper()
+	key := storetypes.NewKVStoreKey(types.StoreKey)
+	storeService := runtime.NewKVStoreService(key)
+	testCtx := testutil.DefaultContextWithDB(t, key, storetypes.NewTransientStoreKey("transient_test"))
+	ctx := testCtx.Ctx.WithBlockHeader(cmtproto.Header{Time: cmttime.Now()})
+	encCfg := moduletestutil.MakeTestEncodingConfig()
 
-	legacyAccNum := uint64(10)
-	val := make([]byte, 8)
-	binary.LittleEndian.PutUint64(val, legacyAccNum)
+	ak := keeper.NewAccountKeeper(
+		encCfg.Codec,
+		storeService,
+		types.ProtoBaseAccount,
+		getMaccPerms(),
+		authcodec.NewBech32Codec("cosmos"),
+		"cosmos",
+		types.NewModuleAddress("gov").String(),
+	)
 
-	// Set value for legacy account number
-	store := suite.accountKeeper.KVStoreService.OpenKVStore(suite.ctx)
-	err := store.Set(types.GlobalAccountNumberKey.Bytes(), val)
-	require.NoError(suite.T(), err)
+	return ctx, ak, storeService
+}
 
-	// check if value is set
-	val, err = store.Get(types.GlobalAccountNumberKey.Bytes())
-	require.NoError(suite.T(), err)
-	require.NotEmpty(suite.T(), val)
+func TestNextAccountNumber(t *testing.T) {
+	const newNum = uint64(100)
+	const legacyNum = uint64(50)
+	legacyVal := &gogotypes.UInt64Value{Value: legacyNum}
+	ctx, ak, storeService := setupAccountKeeper(t)
+	testCases := []struct {
+		name    string
+		setup   func()
+		onNext  func()
+		expects []uint64
+	}{
+		{
+			name: "reset account number to 0 after using legacy key",
+			setup: func() {
+				data, err := legacyVal.Marshal()
+				require.NoError(t, err)
+				store := storeService.OpenKVStore(ctx)
+				err = store.Set(types.LegacyGlobalAccountNumberKey, data)
+				require.NoError(t, err)
+			},
+			onNext: func() {
+				num := uint64(0)
+				err := ak.AccountNumber.Set(ctx, num)
+				require.NoError(t, err)
+			},
+			expects: []uint64{legacyNum, 0},
+		},
+		{
+			name:    "no keys set, account number starts at 0",
+			setup:   func() {},
+			expects: []uint64{0, 1},
+		},
+		{
+			name: "fallback to legacy key when new key is unset",
+			setup: func() {
+				data, err := legacyVal.Marshal()
+				require.NoError(t, err)
+				store := storeService.OpenKVStore(ctx)
+				err = store.Set(types.LegacyGlobalAccountNumberKey, data)
+				require.NoError(t, err)
 
-	suite.acctsModKeeper.EXPECT().InitAccountNumberSeqUnsafe(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(func(ctx context.Context, accNum uint64) (uint64, error) {
-		return legacyAccNum, nil
-	})
+				// unset new key
+				err = (collections.Item[uint64])(ak.AccountNumber).Remove(ctx)
+				require.NoError(t, err)
+			},
+			expects: []uint64{legacyNum, legacyNum + 1},
+		},
+		{
+			name: "new key takes precedence over legacy key",
+			setup: func() {
+				data, err := legacyVal.Marshal()
+				require.NoError(t, err)
+				store := storeService.OpenKVStore(ctx)
+				err = store.Set(types.LegacyGlobalAccountNumberKey, data)
+				require.NoError(t, err)
 
-	err = keeper.MigrateAccountNumberUnsafe(suite.ctx, &suite.accountKeeper)
-	require.NoError(suite.T(), err)
+				err = ak.AccountNumber.Set(ctx, newNum)
+				require.NoError(t, err)
+			},
+			expects: []uint64{newNum, newNum + 1},
+		},
+	}
 
-	val, err = store.Get(types.GlobalAccountNumberKey.Bytes())
-	require.NoError(suite.T(), err)
-	require.Empty(suite.T(), val)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, ak, storeService = setupAccountKeeper(t)
+			tc.setup()
+			nextNum := ak.NextAccountNumber(ctx)
+			require.Equal(t, tc.expects[0], nextNum)
+
+			if tc.onNext != nil {
+				tc.onNext()
+			}
+
+			nextNum = ak.NextAccountNumber(ctx)
+			require.Equal(t, tc.expects[1], nextNum)
+		})
+	}
 }

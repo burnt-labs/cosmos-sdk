@@ -78,7 +78,7 @@ $T_f$ is a separate variable in state for the amount of fees this validator has 
 This variable is incremented at every block by however much fees this validator received that block.
 On the update to the validators power, this variable is used to create the entry in state at $f$, and is then reset to 0.
 
-This fee distribution proposal is agnostic to how all of the blocks fees are divied up between validators.
+This fee distribution proposal is agnostic to how all of the blocks fees are divided up between validators.
 This creates many nice properties, for example it is possible to only rewarding validators who signed that block.
  
 \section{Additional add-ons}
@@ -104,7 +104,7 @@ The solution here is to instead store each period created by a slash in the vali
 Then when withdrawing, you must iterate over all slashes between when you started and ended.
 Suppose you delegated at period $0$, a y\% slash occurred at period $2$, and your withdrawal creates period $4$.
 Then you receive funds from periods $0$ to $2$ as normal.
-The equations for funds you receive for periods $2$ to $4$ now uses $(1 - y)x$ for your stake instead of just $x$ stake.
+The equations for funds you receive for periods $2$ to $4$ now use $(1 - y)x$ for your stake instead of just $x$ stake.
 When there are multiple slashes, you just account for the accumulated slash factor.
 
 In practice this will not really be an efficiency hit, as the number of slashes is expected to be 0 or 1 for most validators.

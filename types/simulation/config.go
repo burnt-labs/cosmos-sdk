@@ -27,6 +27,11 @@ type Config struct {
 	FuzzSeed    []byte
 	TB          testing.TB
 	FauxMerkle  bool
+
+	// Deprecated: unused and will be removed
+	OnOperation bool // run slow invariants every operation
+	// Deprecated: unused and will be removed
+	AllInvariants bool // print all failed invariants if a broken invariant is found
 }
 
 func (c Config) shallowCopy() Config {

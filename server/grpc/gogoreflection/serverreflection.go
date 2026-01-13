@@ -1,35 +1,40 @@
-// Copyright 2016 gRPC authors.
-//
-//  Licensed under the Apache License, Version 2.0 (the "License");
-//  you may not use this file except in compliance with the License.
-//  You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-//  Unless required by applicable law or agreed to in writing, software
-//  distributed under the License is distributed on an "AS IS" BASIS,
-//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//  See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ *
+ * Copyright 2016 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 
-// Package gogoreflection implements server reflection service.
-//
-// The service implemented is defined in:
-// https://github.com/grpc/grpc/blob/master/src/proto/grpc/reflection/v1alpha/reflection.proto.
-//
-// To register server reflection on a gRPC server:
-//
-//	import "google.golang.org/grpc/reflection"
-//
-//	s := grpc.NewServer()
-//	pb.RegisterYourOwnServer(s, &server{})
-//
-//	// Register reflection service on gRPC server.
-//	reflection.Register(s)
-//
-//	s.Serve(lis)
+/*
+Package reflection implements server reflection service.
 
-package gogoreflection
+The service implemented is defined in:
+https://github.com/grpc/grpc/blob/master/src/proto/grpc/reflection/v1alpha/reflection.proto.
+
+To register server reflection on a gRPC server:
+
+	import "google.golang.org/grpc/reflection"
+
+	s := grpc.NewServer()
+	pb.RegisterYourOwnServer(s, &server{})
+
+	// Register reflection service on gRPC server.
+	reflection.Register(s)
+
+	s.Serve(lis)
+*/
+package gogoreflection // import "google.golang.org/grpc/reflection"
 
 import (
 	"bytes"
@@ -42,8 +47,7 @@ import (
 	"sort"
 	"sync"
 
-	//nolint: staticcheck // keep this import for backward compatibility
-	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/proto" //nolint:staticcheck // keep for compat
 	dpb "github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -285,7 +289,7 @@ func fileDescWithDependencies(fd *dpb.FileDescriptorProto, sentFileDescriptors m
 	return r, nil
 }
 
-// fileDescEncodingByFilename finds the file descriptor for given filename,
+// fileDescEncodingByFilename finds the file descriptor for the given filename,
 // finds all of its previously unsent transitive dependencies, does marshaling
 // on them, and returns the marshaled result.
 func (s *serverReflectionServer) fileDescEncodingByFilename(name string, sentFileDescriptors map[string]bool) ([][]byte, error) {
@@ -300,11 +304,11 @@ func (s *serverReflectionServer) fileDescEncodingByFilename(name string, sentFil
 	return fileDescWithDependencies(fd, sentFileDescriptors)
 }
 
-// parseMetadata finds the file descriptor bytes specified meta.
+// parseMetadata finds the file descriptor bytes specified by meta.
 // For SupportPackageIsVersion4, m is the name of the proto file, we
 // call proto.FileDescriptor to get the byte slice.
 // For SupportPackageIsVersion3, m is a byte slice itself.
-func parseMetadata(meta interface{}) ([]byte, bool) {
+func parseMetadata(meta any) ([]byte, bool) {
 	// Check if meta is the file name.
 	if fileNameForMeta, ok := meta.(string); ok {
 		return getFileDescriptor(fileNameForMeta), true
@@ -344,7 +348,7 @@ func (s *serverReflectionServer) fileDescEncodingContainingSymbol(name string, s
 }
 
 // fileDescEncodingContainingExtension finds the file descriptor containing
-// given extension, finds all of its previously unsent transitive dependencies,
+// the given extension, finds all of its previously unsent transitive dependencies,
 // does marshaling on them, and returns the marshaled result.
 func (s *serverReflectionServer) fileDescEncodingContainingExtension(typeName string, extNum int32, sentFileDescriptors map[string]bool) ([][]byte, error) {
 	st, err := typeForName(typeName)

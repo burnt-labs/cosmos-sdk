@@ -3,15 +3,16 @@ package dbadapter
 import (
 	"io"
 
-	corestore "cosmossdk.io/core/store"
+	dbm "github.com/cosmos/cosmos-db"
+
 	"cosmossdk.io/store/cachekv"
 	"cosmossdk.io/store/tracekv"
 	"cosmossdk.io/store/types"
 )
 
-// Store is wrapper type for corestore.KVStoreWithBatch with implementation of KVStore
+// Store is a wrapper type for dbm.DB with implementation of KVStore
 type Store struct {
-	DB corestore.KVStoreWithBatch
+	dbm.DB
 }
 
 // Get wraps the underlying DB's Get method panicking on error.
@@ -85,5 +86,5 @@ func (dsa Store) CacheWrapWithTrace(w io.Writer, tc types.TraceContext) types.Ca
 	return cachekv.NewStore(tracekv.NewStore(dsa, w, tc))
 }
 
-// corestore.KVStoreWithBatch implements KVStore so we can CacheKVStore it.
+// dbm.DB implements KVStore so we can CacheKVStore it.
 var _ types.KVStore = Store{}

@@ -3,47 +3,35 @@ package types
 import (
 	"context"
 
-	abci "github.com/cometbft/cometbft/api/cometbft/abci/v1"
+	abci "github.com/cometbft/cometbft/abci/types"
 )
 
 // ABCI is an interface that enables any finite, deterministic state machine
 // to be driven by a blockchain-based replication engine via the ABCI.
 type ABCI interface {
 	// Info/Query Connection
-
-	// Info returns application info
-	Info(*abci.InfoRequest) (*abci.InfoResponse, error)
-	// Query  returns application state
-	Query(context.Context, *abci.QueryRequest) (*abci.QueryResponse, error)
+	Info(*abci.RequestInfo) (*abci.ResponseInfo, error)                     // Return application info
+	Query(context.Context, *abci.RequestQuery) (*abci.ResponseQuery, error) // Query for state
 
 	// Mempool Connection
-
-	// CheckTx validate a tx for the mempool
-	CheckTx(*abci.CheckTxRequest) (*abci.CheckTxResponse, error)
+	CheckTx(*abci.RequestCheckTx) (*abci.ResponseCheckTx, error) // Validate a tx for the mempool
 
 	// Consensus Connection
-
-	// InitChain Initialize blockchain w validators/other info from CometBFT
-	InitChain(*abci.InitChainRequest) (*abci.InitChainResponse, error)
-	PrepareProposal(*abci.PrepareProposalRequest) (*abci.PrepareProposalResponse, error)
-	ProcessProposal(*abci.ProcessProposalRequest) (*abci.ProcessProposalResponse, error)
-	// FinalizeBlock deliver the decided block with its txs to the Application
-	FinalizeBlock(*abci.FinalizeBlockRequest) (*abci.FinalizeBlockResponse, error)
-	// ExtendVote create application specific vote extension
-	ExtendVote(context.Context, *abci.ExtendVoteRequest) (*abci.ExtendVoteResponse, error)
-	// VerifyVoteExtension verify application's vote extension data
-	VerifyVoteExtension(*abci.VerifyVoteExtensionRequest) (*abci.VerifyVoteExtensionResponse, error)
+	InitChain(*abci.RequestInitChain) (*abci.ResponseInitChain, error) // Initialize blockchain w validators/other info from CometBFT
+	PrepareProposal(*abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error)
+	ProcessProposal(*abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error)
+	// Deliver the decided block with its txs to the Application
+	FinalizeBlock(*abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error)
+	// Create application specific vote extension
+	ExtendVote(context.Context, *abci.RequestExtendVote) (*abci.ResponseExtendVote, error)
+	// Verify application's vote extension data
+	VerifyVoteExtension(*abci.RequestVerifyVoteExtension) (*abci.ResponseVerifyVoteExtension, error)
 	// Commit the state and return the application Merkle root hash
-	Commit() (*abci.CommitResponse, error)
+	Commit() (*abci.ResponseCommit, error)
 
 	// State Sync Connection
-
-	// ListSnapshots list available snapshots
-	ListSnapshots(*abci.ListSnapshotsRequest) (*abci.ListSnapshotsResponse, error)
-	// OfferSnapshot offer a snapshot to the application
-	OfferSnapshot(*abci.OfferSnapshotRequest) (*abci.OfferSnapshotResponse, error)
-	// LoadSnapshotChunk load a snapshot chunk
-	LoadSnapshotChunk(*abci.LoadSnapshotChunkRequest) (*abci.LoadSnapshotChunkResponse, error)
-	// ApplySnapshotChunk apply a snapshot chunk
-	ApplySnapshotChunk(*abci.ApplySnapshotChunkRequest) (*abci.ApplySnapshotChunkResponse, error)
+	ListSnapshots(*abci.RequestListSnapshots) (*abci.ResponseListSnapshots, error)                // List available snapshots
+	OfferSnapshot(*abci.RequestOfferSnapshot) (*abci.ResponseOfferSnapshot, error)                // Offer a snapshot to the application
+	LoadSnapshotChunk(*abci.RequestLoadSnapshotChunk) (*abci.ResponseLoadSnapshotChunk, error)    // Load a snapshot chunk
+	ApplySnapshotChunk(*abci.RequestApplySnapshotChunk) (*abci.ResponseApplySnapshotChunk, error) // Apply a snapshot chunk
 }

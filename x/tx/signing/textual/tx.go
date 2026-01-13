@@ -79,6 +79,8 @@ func (vr txValueRenderer) Format(ctx context.Context, v protoreflect.Value) ([]S
 		FeeGranter:                  txAuthInfo.Fee.Granter,
 		GasLimit:                    txAuthInfo.Fee.GasLimit,
 		TimeoutHeight:               txBody.TimeoutHeight,
+		TimeoutTimestamp:            txBody.TimeoutTimestamp,
+		Unordered:                   txBody.Unordered,
 		ExtensionOptions:            txBody.ExtensionOptions,
 		NonCriticalExtensionOptions: txBody.NonCriticalExtensionOptions,
 		HashOfRawBytes:              getHash(textualData.BodyBytes, textualData.AuthInfoBytes),
@@ -125,6 +127,8 @@ func (vr txValueRenderer) Format(ctx context.Context, v protoreflect.Value) ([]S
 		"Fee granter":                    {},
 		"Gas limit":                      {},
 		"Timeout height":                 {},
+		"Timeout timestamp":              {},
+		"Unordered":                      {},
 		"Other signer":                   {},
 		"Extension options":              {},
 		"Non critical extension options": {},
@@ -200,7 +204,7 @@ func (vr txValueRenderer) Parse(ctx context.Context, screens []Screen) (protoref
 	for i := range screens {
 		parsable[i+1].Indent = screens[i].Indent + 1
 
-		// Take same text, except that we weplace:
+		// Take same text, except that we replace:
 		// "This transaction has <N> Message"
 		// with:
 		// "Message: <N> Any"
@@ -229,6 +233,8 @@ func (vr txValueRenderer) Parse(ctx context.Context, screens []Screen) (protoref
 		Messages:                    envelope.Message,
 		Memo:                        envelope.Memo,
 		TimeoutHeight:               envelope.TimeoutHeight,
+		TimeoutTimestamp:            envelope.TimeoutTimestamp,
+		Unordered:                   envelope.Unordered,
 		ExtensionOptions:            envelope.ExtensionOptions,
 		NonCriticalExtensionOptions: envelope.NonCriticalExtensionOptions,
 	}

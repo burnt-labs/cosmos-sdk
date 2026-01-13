@@ -8,9 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"cosmossdk.io/x/bank/types"
-
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/x/bank/types"
 )
 
 // MintingRestrictionArgs are the args provided to a MintingRestrictionFn function.
@@ -392,7 +391,7 @@ func TestNoOpMintingRestrictionFn(t *testing.T) {
 		err = types.NoOpMintingRestrictionFn(sdk.Context{}, sdk.Coins{})
 	}
 	require.NotPanics(t, testFunc, "NoOpMintingRestrictionFn")
-	assert.NoError(t, err, "NoOpSendRestrictionFn error")
+	assert.NoError(t, err, "NoOpMintingRestrictionFn error")
 }
 
 // SendRestrictionArgs are the args provided to a SendRestrictionFn function.

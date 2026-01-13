@@ -5,15 +5,13 @@ import (
 	"testing"
 	"time"
 
-	gogoprotoany "github.com/cosmos/gogoproto/types/any"
 	"github.com/stretchr/testify/require"
-
-	"cosmossdk.io/x/evidence/exported"
-	"cosmossdk.io/x/evidence/types"
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
+	"github.com/cosmos/cosmos-sdk/x/evidence/exported"
+	"github.com/cosmos/cosmos-sdk/x/evidence/types"
 )
 
 func TestDefaultGenesisState(t *testing.T) {
@@ -131,7 +129,7 @@ func TestUnpackInterfaces(t *testing.T) {
 
 	testCases := []struct {
 		msg      string
-		unpacker gogoprotoany.AnyUnpacker
+		unpacker codectypes.AnyUnpacker
 		expPass  bool
 	}{
 		{

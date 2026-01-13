@@ -7,12 +7,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"cosmossdk.io/collections"
-	"cosmossdk.io/core/testing"
+	"cosmossdk.io/collections/colltest"
+
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 )
 
 func TestMigrate(t *testing.T) {
-	ctx := coretesting.Context()
-	kv := coretesting.KVStoreService(ctx, "test")
+	kv, ctx := colltest.MockStore()
 	sb := collections.NewSchemaBuilder(kv)
 	seq := collections.NewSequence(sb, collections.NewPrefix(0), "seq")
 
@@ -22,7 +23,7 @@ func TestMigrate(t *testing.T) {
 	legacySeqBytes, err := (&types.UInt64Value{Value: wantValue}).Marshal()
 	require.NoError(t, err)
 
-	err = kv.OpenKVStore(ctx).Set(LegacyGlobalAccountNumberKey, legacySeqBytes)
+	err = kv.OpenKVStore(ctx).Set(authtypes.LegacyGlobalAccountNumberKey, legacySeqBytes)
 	require.NoError(t, err)
 
 	err = Migrate(ctx, kv, seq)
@@ -34,8 +35,7 @@ func TestMigrate(t *testing.T) {
 	require.Equal(t, wantValue, gotValue)
 
 	// case the global account number was not set
-	ctx = coretesting.Context()
-	kv = coretesting.KVStoreService(ctx, "test")
+	ctx = kv.NewStoreContext() // this resets the store to zero
 	wantValue = collections.DefaultSequenceStart
 
 	err = Migrate(ctx, kv, seq)

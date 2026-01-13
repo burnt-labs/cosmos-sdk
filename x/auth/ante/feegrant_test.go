@@ -7,8 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cometbft/cometbft/crypto"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	storetypes "cosmossdk.io/store/types"
 
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -55,14 +58,13 @@ func TestDeductFeesNoDelegation(t *testing.T) {
 		},
 		"paying with no account": {
 			fee:   1,
-			valid: true,
+			valid: false,
+			err:   sdkerrors.ErrUnknownAddress,
 			malleate: func(suite *AnteTestSuite) (TestAccount, sdk.AccAddress) {
 				// Do not register the account
 				priv, _, addr := testdata.KeyTestPubAddr()
-				acc := authtypes.NewBaseAccountWithAddress(addr)
-				suite.bankKeeper.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), acc.GetAddress(), authtypes.FeeCollectorName, gomock.Any()).Return(nil).Times(2)
 				return TestAccount{
-					acc:  acc,
+					acc:  authtypes.NewBaseAccountWithAddress(addr),
 					priv: priv,
 				}, nil
 			},
@@ -77,7 +79,8 @@ func TestDeductFeesNoDelegation(t *testing.T) {
 		},
 		"no fee with no account": {
 			fee:   0,
-			valid: true,
+			valid: false,
+			err:   sdkerrors.ErrUnknownAddress,
 			malleate: func(suite *AnteTestSuite) (TestAccount, sdk.AccAddress) {
 				// Do not register the account
 				priv, _, addr := testdata.KeyTestPubAddr()
@@ -144,9 +147,7 @@ func TestDeductFeesNoDelegation(t *testing.T) {
 		tc := stc // to make scopelint happy
 		t.Run(name, func(t *testing.T) {
 			suite := SetupTestSuite(t, false)
-			cdc := codec.NewProtoCodec(suite.encCfg.InterfaceRegistry)
-			signingCtx := suite.encCfg.InterfaceRegistry.SigningContext()
-			protoTxCfg := tx.NewTxConfig(cdc, signingCtx.AddressCodec(), signingCtx.ValidatorAddressCodec(), tx.DefaultSignModes)
+			protoTxCfg := tx.NewTxConfig(codec.NewProtoCodec(suite.encCfg.InterfaceRegistry), tx.DefaultSignModes)
 			// this just tests our handler
 			dfd := ante.NewDeductFeeDecorator(suite.accountKeeper, suite.bankKeeper, suite.feeGrantKeeper, nil)
 			feeAnteHandler := sdk.ChainAnteDecorators(dfd)
@@ -187,6 +188,11 @@ func TestDeductFeesNoDelegation(t *testing.T) {
 			}
 		})
 	}
+}
+
+// don't consume any gas
+func SigGasNoConsumer(meter storetypes.GasMeter, sig []byte, pubkey crypto.PubKey, params authtypes.Params) error {
+	return nil
 }
 
 func genTxWithFeeGranter(gen client.TxConfig, msgs []sdk.Msg, feeAmt sdk.Coins, gas uint64, chainID string, accNums,

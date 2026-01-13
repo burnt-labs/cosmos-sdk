@@ -28,7 +28,7 @@ func RandomGenesisAccounts(simState *module.SimulationState) types.GenesisAccoun
 
 		// Only consider making a vesting account once the initial bonded validator
 		// set is exhausted due to needing to track DelegatedVesting.
-		if !(int64(i) > simState.NumBonded && simState.Rand.Intn(100) < 50) {
+		if int64(i) <= simState.NumBonded || simState.Rand.Intn(100) >= 50 {
 			genesisAccs[i] = bacc
 			continue
 		}
@@ -110,6 +110,5 @@ func RandomizedGenState(simState *module.SimulationState, randGenAccountsFn type
 	genesisAccs := randGenAccountsFn(simState)
 
 	authGenesis := types.NewGenesisState(params, genesisAccs)
-
 	simState.GenState[types.ModuleName] = simState.Cdc.MustMarshalJSON(authGenesis)
 }

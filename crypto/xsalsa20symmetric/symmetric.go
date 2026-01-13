@@ -17,7 +17,9 @@ const (
 
 var ErrCiphertextDecrypt = errors.New("ciphertext decryption failed")
 
-// EncryptSymmetric secret must be 32 bytes long. Use something like Sha256(Bcrypt(passphrase))
+// EncryptSymmetric encrypts the given plaintext with the given secret. The
+//
+// secret must be 32 bytes long. Use something like Sha256(Bcrypt(passphrase))
 // The ciphertext is (secretbox.Overhead + 24) bytes longer than the plaintext.
 func EncryptSymmetric(plaintext, secret []byte) (ciphertext []byte) {
 	if len(secret) != secretLen {
@@ -34,7 +36,9 @@ func EncryptSymmetric(plaintext, secret []byte) (ciphertext []byte) {
 	return ciphertext
 }
 
-// DecryptSymmetric secret must be 32 bytes long. Use something like Sha256(Bcrypt(passphrase))
+// DecryptSymmetric decrypts the given ciphertext with the given secret. The
+//
+// secret must be 32 bytes long. Use something like Sha256(Bcrypt(passphrase))
 // The ciphertext is (secretbox.Overhead + 24) bytes longer than the plaintext.
 func DecryptSymmetric(ciphertext, secret []byte) (plaintext []byte, err error) {
 	if len(secret) != secretLen {

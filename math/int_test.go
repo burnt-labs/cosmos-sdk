@@ -221,20 +221,6 @@ func (s *intTestSuite) TestIdentInt() {
 	}
 }
 
-func minint(i1, i2 int64) int64 {
-	if i1 < i2 {
-		return i1
-	}
-	return i2
-}
-
-func maxint(i1, i2 int64) int64 {
-	if i1 > i2 {
-		return i1
-	}
-	return i2
-}
-
 func (s *intTestSuite) TestArithInt() {
 	for d := 0; d < 1000; d++ {
 		n1 := int64(rand.Int31())
@@ -254,8 +240,8 @@ func (s *intTestSuite) TestArithInt() {
 			{i1.SubRaw(n2), n1 - n2},
 			{i1.MulRaw(n2), n1 * n2},
 			{i1.QuoRaw(n2), n1 / n2},
-			{math.MinInt(i1, i2), minint(n1, n2)},
-			{math.MaxInt(i1, i2), maxint(n1, n2)},
+			{math.MinInt(i1, i2), min(n1, n2)},
+			{math.MaxInt(i1, i2), max(n1, n2)},
 			{i1.Neg(), -n1},
 			{i1.Abs(), n1},
 			{i1.Neg().Abs(), n1},
@@ -499,7 +485,6 @@ func TestRoundTripMarshalToInt(t *testing.T) {
 	}
 
 	for _, value := range values {
-		value := value
 		t.Run(fmt.Sprintf("%d", value), func(t *testing.T) {
 			t.Parallel()
 
@@ -548,7 +533,6 @@ func TestFormatIntNonDigits(t *testing.T) {
 	}
 
 	for _, value := range badCases {
-		value := value
 		t.Run(value, func(t *testing.T) {
 			s, err := math.FormatInt(value)
 			if err == nil {

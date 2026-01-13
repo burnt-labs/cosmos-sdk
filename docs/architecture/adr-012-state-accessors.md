@@ -15,7 +15,7 @@ value and finally unmarshal. Usually this is done by declaring `Keeper.GetXXX` a
 which are repetitive and hard to maintain.
 
 Second, this makes it harder to align with the object capability theorem: the right to access the
-state is defined as a `StoreKey`, which gives full access to the entire Merkle tree, so a module cannot
+state is defined as a `StoreKey`, which gives full access on the entire Merkle tree, so a module cannot
 send the access right to a specific key-value pair (or a set of key-value pairs) to another module safely.
 
 Finally, because the getter/setter functions are defined as methods of a module's `Keeper`, the reviewers
@@ -67,7 +67,7 @@ func (Value) Set(ctx Context, o interface{}) {}
 // Check if a raw value exists
 func (Value) Exists(ctx Context) bool {}
 
-// Delete a raw value value
+// Delete a raw value 
 func (Value) Delete(ctx Context) {}
 ```
 
@@ -92,7 +92,7 @@ func (Mapping) Set(ctx Context, key []byte, o interface{}) {}
 // Check if a raw value exists
 func (Mapping) Has(ctx Context, key []byte) bool {}
 
-// Delete a raw value value
+// Delete a raw value
 func (Mapping) Delete(ctx Context, key []byte) {}
 ```
 

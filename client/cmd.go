@@ -3,22 +3,19 @@ package client
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
-	cmtcfg "github.com/cometbft/cometbft/config"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
 	signingv1beta1 "cosmossdk.io/api/cosmos/tx/signing/v1beta1"
-	corectx "cosmossdk.io/core/context"
-	"cosmossdk.io/log"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
@@ -171,6 +168,7 @@ func ReadPersistentCommandFlags(clientCtx Context, flagSet *pflag.FlagSet) (Cont
 					MinVersion: tls.VersionTLS12,
 				})))
 			}
+			dialOpts = append(dialOpts, grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 
 			grpcClient, err := grpc.NewClient(grpcURI, dialOpts...)
 			if err != nil {
@@ -257,7 +255,7 @@ func readTxCommandFlags(clientCtx Context, flagSet *pflag.FlagSet) (Context, err
 		payer, _ := flagSet.GetString(flags.FlagFeePayer)
 
 		if payer != "" {
-			payerAcc, err := clientCtx.AddressCodec.StringToBytes(payer)
+			payerAcc, err := sdk.AccAddressFromBech32(payer)
 			if err != nil {
 				return clientCtx, err
 			}
@@ -270,7 +268,7 @@ func readTxCommandFlags(clientCtx Context, flagSet *pflag.FlagSet) (Context, err
 		granter, _ := flagSet.GetString(flags.FlagFeeGranter)
 
 		if granter != "" {
-			granterAcc, err := clientCtx.AddressCodec.StringToBytes(granter)
+			granterAcc, err := sdk.AccAddressFromBech32(granter)
 			if err != nil {
 				return clientCtx, err
 			}
@@ -290,7 +288,7 @@ func readTxCommandFlags(clientCtx Context, flagSet *pflag.FlagSet) (Context, err
 
 		if keyType == keyring.TypeLedger && clientCtx.SignModeStr == flags.SignModeTextual {
 			if !slices.Contains(clientCtx.TxConfig.SignModeHandler().SupportedModes(), signingv1beta1.SignMode_SIGN_MODE_TEXTUAL) {
-				return clientCtx, errors.New("SIGN_MODE_TEXTUAL is not available")
+				return clientCtx, fmt.Errorf("SIGN_MODE_TEXTUAL is not available")
 			}
 		}
 
@@ -345,7 +343,7 @@ func GetClientQueryContext(cmd *cobra.Command) (Context, error) {
 // - client.Context field pre-populated & flag not set: uses pre-populated value
 // - client.Context field pre-populated & flag set: uses set flag value
 func GetClientTxContext(cmd *cobra.Command) (Context, error) {
-	ctx := GetClientContextFromCmd(cmd).WithOutput(cmd.OutOrStdout())
+	ctx := GetClientContextFromCmd(cmd)
 	return readTxCommandFlags(ctx, cmd.Flags())
 }
 
@@ -376,41 +374,4 @@ func SetCmdClientContext(cmd *cobra.Command, clientCtx Context) error {
 	}
 
 	return nil
-}
-
-func GetViperFromCmd(cmd *cobra.Command) *viper.Viper {
-	value := cmd.Context().Value(corectx.ViperContextKey)
-	v, ok := value.(*viper.Viper)
-	if !ok {
-		return viper.New()
-	}
-	return v
-}
-
-func GetConfigFromCmd(cmd *cobra.Command) *cmtcfg.Config {
-	v := cmd.Context().Value(corectx.ViperContextKey)
-	viper, ok := v.(*viper.Viper)
-	if !ok {
-		return cmtcfg.DefaultConfig()
-	}
-	return GetConfigFromViper(viper)
-}
-
-func GetLoggerFromCmd(cmd *cobra.Command) log.Logger {
-	v := cmd.Context().Value(corectx.LoggerContextKey)
-	logger, ok := v.(log.Logger)
-	if !ok {
-		return log.NewLogger(cmd.OutOrStdout())
-	}
-	return logger
-}
-
-func GetConfigFromViper(v *viper.Viper) *cmtcfg.Config {
-	conf := cmtcfg.DefaultConfig()
-	err := v.Unmarshal(conf)
-	rootDir := v.GetString(flags.FlagHome)
-	if err != nil {
-		return cmtcfg.DefaultConfig().SetRoot(rootDir)
-	}
-	return conf.SetRoot(rootDir)
 }

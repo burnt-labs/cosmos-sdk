@@ -4,9 +4,9 @@ import (
 	"context"
 
 	"cosmossdk.io/math"
-	"cosmossdk.io/x/staking/types"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/x/staking/types"
 )
 
 // GetBondedPool returns the bonded tokens pool's module account
@@ -55,7 +55,7 @@ func (k Keeper) burnBondedTokens(ctx context.Context, amt math.Int) error {
 
 	coins := sdk.NewCoins(sdk.NewCoin(bondDenom, amt))
 
-	return k.bankKeeper.BurnCoins(ctx, k.authKeeper.GetModuleAddress(types.BondedPoolName), coins)
+	return k.bankKeeper.BurnCoins(ctx, types.BondedPoolName, coins)
 }
 
 // burnNotBondedTokens burns coins from the not bonded pool module account
@@ -72,11 +72,11 @@ func (k Keeper) burnNotBondedTokens(ctx context.Context, amt math.Int) error {
 
 	coins := sdk.NewCoins(sdk.NewCoin(bondDenom, amt))
 
-	return k.bankKeeper.BurnCoins(ctx, k.authKeeper.GetModuleAddress(types.NotBondedPoolName), coins)
+	return k.bankKeeper.BurnCoins(ctx, types.NotBondedPoolName, coins)
 }
 
-// TotalBondedTokens total staking tokens supply which is bonded
-func (k Keeper) TotalBondedTokens(ctx context.Context) (math.Int, error) {
+// TotalValidatorPower total validator power based on the bonded supply for the staking implementation
+func (k Keeper) TotalValidatorPower(ctx context.Context) (math.Int, error) {
 	bondedPool := k.GetBondedPool(ctx)
 	bondDenom, err := k.BondDenom(ctx)
 	if err != nil {
@@ -102,7 +102,7 @@ func (k Keeper) BondedRatio(ctx context.Context) (math.LegacyDec, error) {
 	}
 
 	if stakeSupply.IsPositive() {
-		totalBonded, err := k.TotalBondedTokens(ctx)
+		totalBonded, err := k.TotalValidatorPower(ctx)
 		if err != nil {
 			return math.LegacyZeroDec(), err
 		}

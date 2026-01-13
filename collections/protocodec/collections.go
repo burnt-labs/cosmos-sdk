@@ -1,4 +1,4 @@
-package codec
+package protocodec
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 
 	"cosmossdk.io/collections"
 	collcodec "cosmossdk.io/collections/codec"
-	corecodec "cosmossdk.io/core/codec"
+	corecodec "cosmossdk.io/collections/corecompat"
 )
 
 // BoolValue implements a ValueCodec that saves the bool value
@@ -80,7 +80,7 @@ func (c collValue[T, PT]) EncodeJSON(value T) ([]byte, error) {
 
 func (c collValue[T, PT]) DecodeJSON(b []byte) (value T, err error) {
 	err = c.cdc.UnmarshalJSON(b, PT(&value))
-	return
+	return value, err
 }
 
 func (c collValue[T, PT]) Stringify(value T) string {

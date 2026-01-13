@@ -1,7 +1,6 @@
 package tx
 
 import (
-	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -42,7 +41,7 @@ func QueryTxsByEvents(clientCtx client.Context, page, limit int, query, orderBy 
 		return nil, err
 	}
 
-	resTxs, err := node.TxSearch(context.Background(), query, false, &page, &limit, orderBy)
+	resTxs, err := node.TxSearch(clientCtx.GetCmdContextWithFallback(), query, false, &page, &limit, orderBy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search for txs: %w", err)
 	}
@@ -73,7 +72,9 @@ func QueryTx(clientCtx client.Context, hashHexStr string) (*sdk.TxResponse, erro
 		return nil, err
 	}
 
-	resTx, err := node.Tx(context.Background(), hash, true)
+	// TODO: this may not always need to be proven
+	// https://github.com/cosmos/cosmos-sdk/issues/6807
+	resTx, err := node.Tx(clientCtx.GetCmdContextWithFallback(), hash, true)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +116,7 @@ func getBlocksForTxResults(clientCtx client.Context, resTxs []*coretypes.ResultT
 
 	for _, resTx := range resTxs {
 		if _, ok := resBlocks[resTx.Height]; !ok {
-			resBlock, err := node.Block(context.Background(), &resTx.Height)
+			resBlock, err := node.Block(clientCtx.GetCmdContextWithFallback(), &resTx.Height)
 			if err != nil {
 				return nil, err
 			}
@@ -132,18 +133,16 @@ func mkTxResult(txConfig client.TxConfig, resTx *coretypes.ResultTx, resBlock *c
 	if err != nil {
 		return nil, err
 	}
-	p, ok := txb.(*gogoTxWrapper)
+	p, ok := txb.(intoAny)
 	if !ok {
-		return nil, fmt.Errorf("unexpected type, wanted gogoTxWrapper, got: %T", txb)
+		return nil, fmt.Errorf("expecting a type implementing intoAny, got: %T", txb)
 	}
+	any := p.AsAny()
+	return sdk.NewResponseResultTx(resTx, any, resBlock.Block.Time.Format(time.RFC3339)), nil
+}
 
-	tx, err := p.AsTx()
-	if err != nil {
-		return nil, err
-	}
-	anyTx, err := codectypes.NewAnyWithValue(tx)
-	if err != nil {
-		return nil, err
-	}
-	return sdk.NewResponseResultTx(resTx, anyTx, resBlock.Block.Time.Format(time.RFC3339)), nil
+// Deprecated: this interface is used only internally for scenario we are
+// deprecating (StdTxConfig support)
+type intoAny interface {
+	AsAny() *codectypes.Any
 }

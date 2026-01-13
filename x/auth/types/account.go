@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
-	gogoprotoany "github.com/cosmos/gogoproto/types/any"
+	"github.com/cometbft/cometbft/crypto"
 
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
@@ -16,11 +17,11 @@ import (
 )
 
 var (
-	_ sdk.AccountI                         = (*BaseAccount)(nil)
-	_ GenesisAccount                       = (*BaseAccount)(nil)
-	_ gogoprotoany.UnpackInterfacesMessage = (*BaseAccount)(nil)
-	_ GenesisAccount                       = (*ModuleAccount)(nil)
-	_ sdk.ModuleAccountI                   = (*ModuleAccount)(nil)
+	_ sdk.AccountI                       = (*BaseAccount)(nil)
+	_ GenesisAccount                     = (*BaseAccount)(nil)
+	_ codectypes.UnpackInterfacesMessage = (*BaseAccount)(nil)
+	_ GenesisAccount                     = (*ModuleAccount)(nil)
+	_ sdk.ModuleAccountI                 = (*ModuleAccount)(nil)
 )
 
 // NewBaseAccount creates a new BaseAccount object.
@@ -134,7 +135,7 @@ func (acc BaseAccount) Validate() error {
 }
 
 // UnpackInterfaces implements UnpackInterfacesMessage.UnpackInterfaces
-func (acc BaseAccount) UnpackInterfaces(unpacker gogoprotoany.AnyUnpacker) error {
+func (acc BaseAccount) UnpackInterfaces(unpacker codectypes.AnyUnpacker) error {
 	if acc.PubKey == nil {
 		return nil
 	}
@@ -189,12 +190,7 @@ func NewModuleAccount(ba *BaseAccount, name string, permissions ...string) *Modu
 
 // HasPermission returns whether or not the module account has permission.
 func (ma ModuleAccount) HasPermission(permission string) bool {
-	for _, perm := range ma.Permissions {
-		if perm == permission {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ma.Permissions, permission)
 }
 
 // GetName returns the name of the holder's module
@@ -209,7 +205,7 @@ func (ma ModuleAccount) GetPermissions() []string {
 
 // SetPubKey - Implements AccountI
 func (ma ModuleAccount) SetPubKey(pubKey cryptotypes.PubKey) error {
-	return errors.New("not supported for module accounts")
+	return fmt.Errorf("not supported for module accounts")
 }
 
 // Validate checks for errors on the account fields
@@ -222,7 +218,7 @@ func (ma ModuleAccount) Validate() error {
 		return errors.New("uninitialized ModuleAccount: BaseAccount is nil")
 	}
 
-	if ma.Address != sdk.AccAddress(AddressHash([]byte(ma.Name))).String() {
+	if ma.Address != sdk.AccAddress(crypto.AddressHash([]byte(ma.Name))).String() {
 		return fmt.Errorf("address %s cannot be derived from the module name '%s'", ma.Address, ma.Name)
 	}
 

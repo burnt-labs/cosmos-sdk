@@ -116,7 +116,7 @@ Indent  Text
 0       ">tricky key4<: note the leading space in the presentation"
 0       "introducing an aggregate"
 1       "key5: false"
-1       "key6: a very long line of text, please cooperate and break into multiple lines."
+1       "key6: a very long line of text, please coöperate and break into multiple lines."
 1       "Can we do further nesting?"
 2       "You bet we can!"
 ```

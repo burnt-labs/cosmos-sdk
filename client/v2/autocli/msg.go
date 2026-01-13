@@ -16,14 +16,11 @@ import (
 	"cosmossdk.io/client/v2/internal/util"
 	addresscodec "cosmossdk.io/core/address"
 
-	// the following will be extracted to a separate module
-	// https://github.com/cosmos/cosmos-sdk/issues/14403
-	govcli "cosmossdk.io/x/gov/client/cli"
-	govtypes "cosmossdk.io/x/gov/types"
-	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
-
 	"github.com/cosmos/cosmos-sdk/client"
 	clienttx "github.com/cosmos/cosmos-sdk/client/tx"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	govcli "github.com/cosmos/cosmos-sdk/x/gov/client/cli"
+	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 )
 
 // BuildMsgCommand builds the msg commands for all the provided modules. If a custom command is provided for a
@@ -130,7 +127,7 @@ func (b *Builder) BuildMsgMethodCommand(descriptor protoreflect.MethodDescriptor
 		clientCtx = clientCtx.WithOutput(cmd.OutOrStdout())
 
 		fd := input.Descriptor().Fields().ByName(protoreflect.Name(flag.GetSignerFieldName(input.Descriptor())))
-		addressCodec := b.Builder.AddressCodec
+		addressCodec := b.AddressCodec
 
 		// handle gov proposals commands
 		skipProposal, _ := cmd.Flags().GetBool(flags.FlagNoProposal)
@@ -145,9 +142,9 @@ func (b *Builder) BuildMsgMethodCommand(descriptor protoreflect.MethodDescriptor
 				// override address codec if validator or consensus address
 				switch scalarType {
 				case flag.ValidatorAddressStringScalarType:
-					addressCodec = b.Builder.ValidatorAddressCodec
+					addressCodec = b.ValidatorAddressCodec
 				case flag.ConsensusAddressStringScalarType:
-					addressCodec = b.Builder.ConsensusAddressCodec
+					addressCodec = b.ConsensusAddressCodec
 				}
 			}
 
@@ -164,7 +161,9 @@ func (b *Builder) BuildMsgMethodCommand(descriptor protoreflect.MethodDescriptor
 		// Here we use dynamicpb, to create a proto v1 compatible message.
 		// The SDK codec will handle protov2 -> protov1 (marshal)
 		msg := dynamicpb.NewMessage(input.Descriptor())
-		proto.Merge(msg, input.Interface())
+		if err := cloneMessage(msg, input); err != nil {
+			return fmt.Errorf("failed to clone message: %w", err)
+		}
 
 		return clienttx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), msg)
 	}
@@ -220,11 +219,23 @@ func (b *Builder) handleGovProposal(
 	// Here we use dynamicpb, to create a proto v1 compatible message.
 	// The SDK codec will handle protov2 -> protov1 (marshal)
 	msg := dynamicpb.NewMessage(input.Descriptor())
-	proto.Merge(msg, input.Interface())
+	if err := cloneMessage(msg, input); err != nil {
+		return fmt.Errorf("failed to clone message: %w", err)
+	}
 
 	if err := proposal.SetMsgs([]gogoproto.Message{msg}); err != nil {
 		return fmt.Errorf("failed to set msg in proposal %w", err)
 	}
 
 	return clienttx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), proposal)
+}
+
+// cloneMessage safely copies fields from src message to dst message.
+// this avoids the proto.Merge issue with field descriptors from different repositories.
+func cloneMessage(dst, src protoreflect.Message) error {
+	bz, err := proto.Marshal(src.Interface())
+	if err != nil {
+		return err
+	}
+	return proto.Unmarshal(bz, dst.Interface())
 }

@@ -1,43 +1,44 @@
-// Deprecated:
+/*
+Deprecated.
 
-// Legacy types are defined below to aid in the migration of CometBFT consensus
-// parameters from use of the now deprecated x/params modules to a new dedicated
-// x/consensus module.
-//
-// Application developers should ensure that they implement their upgrade handler
-// correctly such that app.ConsensusParamsKeeper.Set() is called with the values
-// returned by GetConsensusParams().
-//
-// Example:
-//
-//	baseAppLegacySS := app.ParamsKeeper.Subspace(baseapp.Paramspace).WithKeyTable(paramstypes.ConsensusParamsKeyTable())
-//
-//	app.UpgradeKeeper.SetUpgradeHandler(
-//		UpgradeName,
-//		func(ctx sdk.Context, plan upgradetypes.Plan, fromVM module.VersionMap) (module.VersionMap, error) {
-//			if cp := baseapp.GetConsensusParams(ctx, baseAppLegacySS); cp != nil {
-//				app.ConsensusParamsKeeper.Set(ctx, cp)
-//			} else {
-//				ctx.Logger().Info("warning: consensus parameters are undefined; skipping migration", "upgrade", UpgradeName)
-//			}
-//
-//			return app.ModuleManager.RunMigrations(ctx, app.Configurator(), fromVM)
-//		},
-//	)
-//
-// Developers can also bypass the use of the legacy Params subspace and set the
-// values to app.ConsensusParamsKeeper.Set() explicitly.
-//
-// Note, for new chains this is not necessary as CometBFT's consensus parameters
-// will automatically be set for you in InitChain.
+Legacy types are defined below to aid in the migration of CometBFT consensus
+parameters from use of the now deprecated x/params modules to a new dedicated
+x/consensus module.
 
+Application developers should ensure that they implement their upgrade handler
+correctly such that app.ConsensusParamsKeeper.Set() is called with the values
+returned by GetConsensusParams().
+
+Example:
+
+	baseAppLegacySS := app.ParamsKeeper.Subspace(baseapp.Paramspace).WithKeyTable(paramstypes.ConsensusParamsKeyTable())
+
+	app.UpgradeKeeper.SetUpgradeHandler(
+		UpgradeName,
+		func(ctx sdk.Context, plan upgradetypes.Plan, fromVM module.VersionMap) (module.VersionMap, error) {
+			if cp := baseapp.GetConsensusParams(ctx, baseAppLegacySS); cp != nil {
+				app.ConsensusParamsKeeper.Set(ctx, cp)
+			} else {
+				ctx.Logger().Info("warning: consensus parameters are undefined; skipping migration", "upgrade", UpgradeName)
+			}
+
+			return app.ModuleManager.RunMigrations(ctx, app.Configurator(), fromVM)
+		},
+	)
+
+Developers can also bypass the use of the legacy Params subspace and set the
+values to app.ConsensusParamsKeeper.Set() explicitly.
+
+Note, for new chains this is not necessary as CometBFT's consensus parameters
+will automatically be set for you in InitChain.
+*/
 package baseapp
 
 import (
 	"errors"
 	"fmt"
 
-	cmtproto "github.com/cometbft/cometbft/api/cometbft/types/v1"
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
@@ -51,11 +52,11 @@ var (
 )
 
 type LegacyParamStore interface {
-	Get(ctx sdk.Context, key []byte, ptr interface{})
+	Get(ctx sdk.Context, key []byte, ptr any)
 	Has(ctx sdk.Context, key []byte) bool
 }
 
-func ValidateBlockParams(i interface{}) error {
+func ValidateBlockParams(i any) error {
 	v, ok := i.(cmtproto.BlockParams)
 	if !ok {
 		return fmt.Errorf("invalid parameter type: %T", i)
@@ -72,7 +73,7 @@ func ValidateBlockParams(i interface{}) error {
 	return nil
 }
 
-func ValidateEvidenceParams(i interface{}) error {
+func ValidateEvidenceParams(i any) error {
 	v, ok := i.(cmtproto.EvidenceParams)
 	if !ok {
 		return fmt.Errorf("invalid parameter type: %T", i)
@@ -93,7 +94,7 @@ func ValidateEvidenceParams(i interface{}) error {
 	return nil
 }
 
-func ValidateValidatorParams(i interface{}) error {
+func ValidateValidatorParams(i any) error {
 	v, ok := i.(cmtproto.ValidatorParams)
 	if !ok {
 		return fmt.Errorf("invalid parameter type: %T", i)

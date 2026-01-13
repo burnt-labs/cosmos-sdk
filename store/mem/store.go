@@ -3,8 +3,8 @@ package mem
 import (
 	"io"
 
-	corestore "cosmossdk.io/core/store"
-	coretesting "cosmossdk.io/core/testing"
+	dbm "github.com/cosmos/cosmos-db"
+
 	"cosmossdk.io/store/cachekv"
 	"cosmossdk.io/store/dbadapter"
 	pruningtypes "cosmossdk.io/store/pruning/types"
@@ -24,10 +24,10 @@ type Store struct {
 }
 
 func NewStore() *Store {
-	return NewStoreWithDB(coretesting.NewMemDB())
+	return NewStoreWithDB(dbm.NewMemDB())
 }
 
-func NewStoreWithDB(db corestore.KVStoreWithBatch) *Store { //nolint: interfacer // Concrete return type is fine here.
+func NewStoreWithDB(db *dbm.MemDB) *Store { //nolint: interfacer // Concrete return type is fine here.
 	return &Store{Store: dbadapter.Store{DB: db}}
 }
 
@@ -47,7 +47,7 @@ func (s Store) CacheWrapWithTrace(w io.Writer, tc types.TraceContext) types.Cach
 }
 
 // Commit performs a no-op as entries are persistent between commitments.
-func (s *Store) Commit() (id types.CommitID) { return }
+func (s *Store) Commit() (id types.CommitID) { return id }
 
 func (s *Store) SetPruning(pruning pruningtypes.PruningOptions) {}
 
@@ -57,8 +57,6 @@ func (s *Store) GetPruning() pruningtypes.PruningOptions {
 	return pruningtypes.NewPruningOptions(pruningtypes.PruningUndefined)
 }
 
-func (s Store) LastCommitID() (id types.CommitID) { return }
+func (s Store) LastCommitID() (id types.CommitID) { return id }
 
-func (s Store) LatestVersion() (version int64) { return }
-
-func (s Store) WorkingHash() (hash []byte) { return }
+func (s Store) WorkingHash() (hash []byte) { return hash }

@@ -36,6 +36,21 @@ Ref: https://keepachangelog.com/en/1.0.0/
 
 ## [Unreleased]
 
+### Improvements
+
+* [#23720](https://github.com/cosmos/cosmos-sdk/pull/23720) Get block height from db after node execution fails
+
+### Bug Fixes
+
+* [#23683](https://github.com/cosmos/cosmos-sdk/pull/23683) Replace `SigInt` with `SigTerm` to gracefully shutdown the process.
+
+## v1.7.1 - 2025-01-12
+
+### Bug Fixes
+
+* [#23652](https://github.com/cosmos/cosmos-sdk/pull/23652) Fix issue with wrong directory placement when using `prepare-upgrade` for non archive.
+* [#23653](https://github.com/cosmos/cosmos-sdk/pull/23653) Remove duplicate binary downloads during auto-download process
+
 ## v1.7.0 - 2024-11-18
 
 ### Features

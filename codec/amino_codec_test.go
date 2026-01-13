@@ -2,7 +2,6 @@ package codec_test
 
 import (
 	"bytes"
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -17,13 +16,13 @@ func createTestCodec() *codec.LegacyAmino {
 	cdc.RegisterInterface((*testdata.Animal)(nil), nil)
 	// NOTE: since we unmarshal interface using pointers, we need to register a pointer
 	// types here.
-	cdc.RegisterConcrete(&testdata.Dog{}, "testdata/Dog")
-	cdc.RegisterConcrete(&testdata.Cat{}, "testdata/Cat")
+	cdc.RegisterConcrete(&testdata.Dog{}, "testdata/Dog", nil)
+	cdc.RegisterConcrete(&testdata.Cat{}, "testdata/Cat", nil)
 
 	return cdc
 }
 
-func TestAminoMarsharlInterface(t *testing.T) {
+func TestAminoMarshalInterface(t *testing.T) {
 	cdc := codec.NewAminoCodec(createTestCodec())
 	m := interfaceMarshaler{cdc.MarshalInterface, cdc.UnmarshalInterface}
 	testInterfaceMarshaling(require.New(t), m, true)
@@ -110,5 +109,5 @@ func TestAminoCodecUnpackAnyFails(t *testing.T) {
 	cdc := codec.NewAminoCodec(createTestCodec())
 	err := cdc.UnpackAny(new(types.Any), &testdata.Cat{})
 	require.Error(t, err)
-	require.Equal(t, err, errors.New("AminoCodec can't handle unpack protobuf Any's"))
+	require.EqualError(t, err, "AminoCodec can't handle unpack protobuf Any's")
 }

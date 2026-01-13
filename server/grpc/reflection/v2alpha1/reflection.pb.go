@@ -340,7 +340,7 @@ func (m *ChainDescriptor) GetId() string {
 
 // CodecDescriptor describes the registered interfaces and provides metadata information on the types
 type CodecDescriptor struct {
-	// interfaces is a list of the registerted interfaces descriptors
+	// interfaces is a list of the registered interfaces descriptors
 	Interfaces []*InterfaceDescriptor `protobuf:"bytes,1,rep,name=interfaces,proto3" json:"interfaces,omitempty"`
 }
 

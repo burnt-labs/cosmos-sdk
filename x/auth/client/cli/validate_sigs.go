@@ -2,7 +2,7 @@ package cli
 
 import (
 	"bytes"
-	"errors"
+	"fmt"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -20,7 +20,7 @@ import (
 
 func GetValidateSignaturesCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "validate-signatures <file>",
+		Use:   "validate-signatures [file]",
 		Short: "validate transactions signatures",
 		Long: `Print the addresses that must sign the transaction, those who have already
 signed it, and make sure that signatures are in the correct order.
@@ -28,7 +28,7 @@ signed it, and make sure that signatures are in the correct order.
 The command would check whether all required signers have signed the transactions, whether
 the signatures were collected in the right order, and if the signature is valid over the
 given transaction. If the --offline flag is also set, signature validation over the
-transaction will be not be performed as that will require RPC communication with a full node.
+transaction will not be performed as that will require RPC communication with a full node.
 `,
 		PreRun: preSignCmd,
 		RunE:   makeValidateSignaturesCmd(),
@@ -52,7 +52,7 @@ func makeValidateSignaturesCmd() func(cmd *cobra.Command, args []string) error {
 		}
 
 		if !printAndValidateSigs(cmd, clientCtx, txBldr.ChainID(), stdTx, clientCtx.Offline) {
-			return errors.New("signatures validation failed")
+			return fmt.Errorf("signatures validation failed")
 		}
 
 		return nil

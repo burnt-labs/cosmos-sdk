@@ -3,6 +3,7 @@ package mempool_test
 import (
 	"sort"
 
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
 
@@ -10,7 +11,7 @@ import (
 
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/cosmos/cosmos-sdk/types/mempool"
+	mempool "github.com/cosmos/cosmos-sdk/types/mempool"
 	"github.com/cosmos/cosmos-sdk/x/auth/signing"
 )
 
@@ -22,7 +23,7 @@ var (
 
 // Property Based Testing
 // Split the senders tx in independent slices and then test the following properties in each slice
-// same elements input on the mempool should be in the output except for sender nonce duplicates, which are overwritten by the later duplicate entries.
+// same elements input to the mempool should be in the output except for sender nonce duplicates, which are overwritten by the later duplicate entries.
 // for every sender transaction tx_n, tx_0.nonce < tx_1.nonce ... < tx_n.nonce
 
 func AddressGenerator(t *rapid.T) *rapid.Generator[sdk.AccAddress] {
@@ -33,7 +34,7 @@ func AddressGenerator(t *rapid.T) *rapid.Generator[sdk.AccAddress] {
 }
 
 func testMempoolProperties(t *rapid.T) {
-	ctx := sdk.NewContext(nil, false, log.NewNopLogger())
+	ctx := sdk.NewContext(nil, cmtproto.Header{}, false, log.NewNopLogger())
 	mp := mempool.NewSenderNonceMempool()
 
 	genMultipleAddress := rapid.SliceOfNDistinct(AddressGenerator(t), 1, 10, func(acc sdk.AccAddress) string {

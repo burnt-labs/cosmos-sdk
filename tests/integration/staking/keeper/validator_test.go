@@ -4,18 +4,18 @@ import (
 	"fmt"
 	"testing"
 
+	abci "github.com/cometbft/cometbft/abci/types"
 	"gotest.tools/v3/assert"
 
 	"cosmossdk.io/math"
-	banktestutil "cosmossdk.io/x/bank/testutil"
-	"cosmossdk.io/x/staking/keeper"
-	"cosmossdk.io/x/staking/testutil"
-	"cosmossdk.io/x/staking/types"
 
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	simtestutil "github.com/cosmos/cosmos-sdk/testutil/sims"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/cosmos/cosmos-sdk/types/module"
+	banktestutil "github.com/cosmos/cosmos-sdk/x/bank/testutil"
+	"github.com/cosmos/cosmos-sdk/x/staking/keeper"
+	"github.com/cosmos/cosmos-sdk/x/staking/testutil"
+	"github.com/cosmos/cosmos-sdk/x/staking/types"
 )
 
 func newMonikerValidator(tb testing.TB, operator sdk.ValAddress, pubKey cryptotypes.PubKey, moniker string) types.Validator {
@@ -27,6 +27,7 @@ func newMonikerValidator(tb testing.TB, operator sdk.ValAddress, pubKey cryptoty
 
 func bootstrapValidatorTest(tb testing.TB, power int64, numAddrs int) (*fixture, []sdk.AccAddress, []sdk.ValAddress) {
 	tb.Helper()
+
 	f := initFixture(tb)
 
 	addrDels, addrVals := generateAddresses(f, numAddrs)
@@ -49,6 +50,7 @@ func bootstrapValidatorTest(tb testing.TB, power int64, numAddrs int) (*fixture,
 
 func initValidators(tb testing.TB, power int64, numAddrs int, powers []int64) (*fixture, []sdk.AccAddress, []sdk.ValAddress, []types.Validator) {
 	tb.Helper()
+
 	f, addrs, valAddrs := bootstrapValidatorTest(tb, power, numAddrs)
 	pks := simtestutil.CreateTestPubKeys(numAddrs)
 
@@ -72,10 +74,10 @@ func TestUpdateBondedValidatorsDecreaseCliff(t *testing.T) {
 	notBondedPool := f.stakingKeeper.GetNotBondedPool(f.sdkCtx)
 
 	// create keeper parameters
-	params, err := f.stakingKeeper.Params.Get(f.sdkCtx)
+	params, err := f.stakingKeeper.GetParams(f.sdkCtx)
 	assert.NilError(t, err)
 	params.MaxValidators = uint32(maxVals)
-	assert.NilError(t, f.stakingKeeper.Params.Set(f.sdkCtx, params))
+	assert.NilError(t, f.stakingKeeper.SetParams(f.sdkCtx, params))
 
 	bondDenom, err := f.stakingKeeper.BondDenom(f.sdkCtx)
 	assert.NilError(t, err)
@@ -107,9 +109,9 @@ func TestUpdateBondedValidatorsDecreaseCliff(t *testing.T) {
 	nextCliffVal, _ = nextCliffVal.RemoveDelShares(math.LegacyNewDecFromInt(shares))
 	_ = keeper.TestingUpdateValidator(f.stakingKeeper, f.sdkCtx, nextCliffVal, true)
 
-	expectedValStatus := map[int]sdk.BondStatus{
-		9: sdk.Bonded, 8: sdk.Bonded, 7: sdk.Bonded, 5: sdk.Bonded, 4: sdk.Bonded,
-		0: sdk.Unbonding, 1: sdk.Unbonding, 2: sdk.Unbonding, 3: sdk.Unbonding, 6: sdk.Unbonding,
+	expectedValStatus := map[int]types.BondStatus{
+		9: types.Bonded, 8: types.Bonded, 7: types.Bonded, 5: types.Bonded, 4: types.Bonded,
+		0: types.Unbonding, 1: types.Unbonding, 2: types.Unbonding, 3: types.Unbonding, 6: types.Unbonding,
 	}
 
 	// require all the validators have their respective statuses
@@ -121,7 +123,7 @@ func TestUpdateBondedValidatorsDecreaseCliff(t *testing.T) {
 
 		assert.Equal(
 			t, status, val.GetStatus(),
-			fmt.Sprintf("expected validator at index %v to have status: %x", valIdx, status),
+			fmt.Sprintf("expected validator at index %v to have status: %s", valIdx, status),
 		)
 	}
 }
@@ -155,7 +157,7 @@ func TestSlashToZeroPowerRemoved(t *testing.T) {
 	applyValidatorSetUpdates(t, f.sdkCtx, f.stakingKeeper, -1)
 	// validator should be unbonding
 	validator, _ = f.stakingKeeper.GetValidator(f.sdkCtx, addrVals[0])
-	assert.Equal(t, validator.GetStatus(), sdk.Unbonding)
+	assert.Equal(t, validator.GetStatus(), types.Unbonding)
 }
 
 // test how the validators are sorted, tests GetBondedValidatorsByPower
@@ -262,10 +264,10 @@ func TestGetValidatorSortingMixed(t *testing.T) {
 	f.accountKeeper.SetModuleAccount(f.sdkCtx, bondedPool)
 
 	// now 2 max resValidators
-	params, err := f.stakingKeeper.Params.Get(f.sdkCtx)
+	params, err := f.stakingKeeper.GetParams(f.sdkCtx)
 	assert.NilError(t, err)
 	params.MaxValidators = 2
-	assert.NilError(t, f.stakingKeeper.Params.Set(f.sdkCtx, params))
+	assert.NilError(t, f.stakingKeeper.SetParams(f.sdkCtx, params))
 
 	// initialize some validators into the state
 	amts := []math.Int{
@@ -317,11 +319,12 @@ func TestGetValidatorsEdgeCases(t *testing.T) {
 	f, addrs, _ := bootstrapValidatorTest(t, 1000, 20)
 
 	// set max validators to 2
-	params, err := f.stakingKeeper.Params.Get(f.sdkCtx)
+	params, err := f.stakingKeeper.GetParams(f.sdkCtx)
 	assert.NilError(t, err)
 	nMax := uint32(2)
 	params.MaxValidators = nMax
-	assert.NilError(t, f.stakingKeeper.Params.Set(f.sdkCtx, params))
+	assert.NilError(t, f.stakingKeeper.SetParams(f.sdkCtx, params))
+
 	// initialize some validators into the state
 	powers := []int64{0, 100, 400, 400}
 	var validators [4]types.Validator
@@ -436,10 +439,11 @@ func TestValidatorBondHeight(t *testing.T) {
 	f, addrs, _ := bootstrapValidatorTest(t, 1000, 20)
 
 	// now 2 max resValidators
-	params, err := f.stakingKeeper.Params.Get(f.sdkCtx)
+	params, err := f.stakingKeeper.GetParams(f.sdkCtx)
 	assert.NilError(t, err)
 	params.MaxValidators = 2
-	assert.NilError(t, f.stakingKeeper.Params.Set(f.sdkCtx, params))
+	assert.NilError(t, f.stakingKeeper.SetParams(f.sdkCtx, params))
+
 	// initialize some validators into the state
 	var validators [3]types.Validator
 	validators[0] = testutil.NewValidator(t, sdk.ValAddress(PKs[0].Address().Bytes()), PKs[0])
@@ -483,11 +487,11 @@ func TestValidatorBondHeight(t *testing.T) {
 
 func TestFullValidatorSetPowerChange(t *testing.T) {
 	f, addrs, _ := bootstrapValidatorTest(t, 1000, 20)
-	params, err := f.stakingKeeper.Params.Get(f.sdkCtx)
+	params, err := f.stakingKeeper.GetParams(f.sdkCtx)
 	assert.NilError(t, err)
-	max := 2
-	params.MaxValidators = uint32(2)
-	assert.NilError(t, f.stakingKeeper.Params.Set(f.sdkCtx, params))
+	maxValidators := 2
+	params.MaxValidators = uint32(maxValidators)
+	assert.NilError(t, f.stakingKeeper.SetParams(f.sdkCtx, params))
 
 	// initialize some validators into the state
 	powers := []int64{0, 100, 400, 400, 200}
@@ -512,7 +516,7 @@ func TestFullValidatorSetPowerChange(t *testing.T) {
 	assert.Equal(t, types.Unbonded, validators[4].Status)
 	resValidators, err := f.stakingKeeper.GetBondedValidatorsByPower(f.sdkCtx)
 	assert.NilError(t, err)
-	assert.Equal(t, max, len(resValidators))
+	assert.Equal(t, maxValidators, len(resValidators))
 	assert.Assert(ValEq(t, validators[2], resValidators[0])) // in the order of txs
 	assert.Assert(ValEq(t, validators[3], resValidators[1]))
 
@@ -523,7 +527,7 @@ func TestFullValidatorSetPowerChange(t *testing.T) {
 	validators[0] = keeper.TestingUpdateValidator(f.stakingKeeper, f.sdkCtx, validators[0], true)
 	resValidators, err = f.stakingKeeper.GetBondedValidatorsByPower(f.sdkCtx)
 	assert.NilError(t, err)
-	assert.Equal(t, max, len(resValidators))
+	assert.Equal(t, maxValidators, len(resValidators))
 	assert.Assert(ValEq(t, validators[0], resValidators[0]))
 	assert.Assert(ValEq(t, validators[2], resValidators[1]))
 }
@@ -557,8 +561,8 @@ func TestApplyAndReturnValidatorSetUpdatesAllNone(t *testing.T) {
 	assert.NilError(t, err)
 	validators[0], _ = f.stakingKeeper.GetValidator(f.sdkCtx, val0bz)
 	validators[1], _ = f.stakingKeeper.GetValidator(f.sdkCtx, val1bz)
-	assert.DeepEqual(t, validators[0].ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[1])
-	assert.DeepEqual(t, validators[1].ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
+	assert.DeepEqual(t, validators[0].ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[1])
+	assert.DeepEqual(t, validators[1].ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
 }
 
 func TestApplyAndReturnValidatorSetUpdatesIdentical(t *testing.T) {
@@ -607,7 +611,7 @@ func TestApplyAndReturnValidatorSetUpdatesSingleValueChange(t *testing.T) {
 	validators[0] = keeper.TestingUpdateValidator(f.stakingKeeper, f.sdkCtx, validators[0], false)
 
 	updates := applyValidatorSetUpdates(t, f.sdkCtx, f.stakingKeeper, 1)
-	assert.DeepEqual(t, validators[0].ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
+	assert.DeepEqual(t, validators[0].ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
 }
 
 func TestApplyAndReturnValidatorSetUpdatesMultipleValueChange(t *testing.T) {
@@ -629,8 +633,8 @@ func TestApplyAndReturnValidatorSetUpdatesMultipleValueChange(t *testing.T) {
 	validators[1] = keeper.TestingUpdateValidator(f.stakingKeeper, f.sdkCtx, validators[1], false)
 
 	updates := applyValidatorSetUpdates(t, f.sdkCtx, f.stakingKeeper, 2)
-	assert.DeepEqual(t, validators[0].ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
-	assert.DeepEqual(t, validators[1].ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[1])
+	assert.DeepEqual(t, validators[0].ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
+	assert.DeepEqual(t, validators[1].ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[1])
 }
 
 func TestApplyAndReturnValidatorSetUpdatesInserted(t *testing.T) {
@@ -649,7 +653,7 @@ func TestApplyAndReturnValidatorSetUpdatesInserted(t *testing.T) {
 	val2bz, err := f.stakingKeeper.ValidatorAddressCodec().StringToBytes(validators[2].GetOperator())
 	assert.NilError(t, err)
 	validators[2], _ = f.stakingKeeper.GetValidator(f.sdkCtx, val2bz)
-	assert.DeepEqual(t, validators[2].ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
+	assert.DeepEqual(t, validators[2].ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
 
 	// test validator added at the beginning
 	//  tendermintUpdate set: {} -> {c0}
@@ -659,7 +663,7 @@ func TestApplyAndReturnValidatorSetUpdatesInserted(t *testing.T) {
 	val3bz, err := f.stakingKeeper.ValidatorAddressCodec().StringToBytes(validators[3].GetOperator())
 	assert.NilError(t, err)
 	validators[3], _ = f.stakingKeeper.GetValidator(f.sdkCtx, val3bz)
-	assert.DeepEqual(t, validators[3].ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
+	assert.DeepEqual(t, validators[3].ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
 
 	// test validator added at the end
 	//  tendermintUpdate set: {} -> {c0}
@@ -669,15 +673,15 @@ func TestApplyAndReturnValidatorSetUpdatesInserted(t *testing.T) {
 	val4bz, err := f.stakingKeeper.ValidatorAddressCodec().StringToBytes(validators[4].GetOperator())
 	assert.NilError(t, err)
 	validators[4], _ = f.stakingKeeper.GetValidator(f.sdkCtx, val4bz)
-	assert.DeepEqual(t, validators[4].ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
+	assert.DeepEqual(t, validators[4].ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
 }
 
 func TestApplyAndReturnValidatorSetUpdatesWithCliffValidator(t *testing.T) {
 	f, addrs, _ := bootstrapValidatorTest(t, 1000, 20)
 	params := types.DefaultParams()
 	params.MaxValidators = 2
-	err := f.stakingKeeper.Params.Set(f.sdkCtx, params)
-	assert.NilError(t, err)
+	assert.NilError(t, f.stakingKeeper.SetParams(f.sdkCtx, params))
+
 	powers := []int64{10, 20, 5}
 	var validators [5]types.Validator
 	for i, power := range powers {
@@ -706,17 +710,17 @@ func TestApplyAndReturnValidatorSetUpdatesWithCliffValidator(t *testing.T) {
 	val2bz, err := f.stakingKeeper.ValidatorAddressCodec().StringToBytes(validators[2].GetOperator())
 	assert.NilError(t, err)
 	validators[2], _ = f.stakingKeeper.GetValidator(f.sdkCtx, val2bz)
-	assert.DeepEqual(t, validators[0].ModuleValidatorUpdateZero(), updates[1])
-	assert.DeepEqual(t, validators[2].ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
+	assert.DeepEqual(t, validators[0].ABCIValidatorUpdateZero(), updates[1])
+	assert.DeepEqual(t, validators[2].ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
 }
 
 func TestApplyAndReturnValidatorSetUpdatesNewValidator(t *testing.T) {
 	f, _, _ := bootstrapValidatorTest(t, 1000, 20)
-	params, err := f.stakingKeeper.Params.Get(f.sdkCtx)
+	params, err := f.stakingKeeper.GetParams(f.sdkCtx)
 	assert.NilError(t, err)
 	params.MaxValidators = uint32(3)
 
-	assert.NilError(t, f.stakingKeeper.Params.Set(f.sdkCtx, params))
+	assert.NilError(t, f.stakingKeeper.SetParams(f.sdkCtx, params))
 
 	powers := []int64{100, 100}
 	var validators [2]types.Validator
@@ -743,8 +747,8 @@ func TestApplyAndReturnValidatorSetUpdatesNewValidator(t *testing.T) {
 	assert.NilError(t, err)
 	validators[0], _ = f.stakingKeeper.GetValidator(f.sdkCtx, val0bz)
 	validators[1], _ = f.stakingKeeper.GetValidator(f.sdkCtx, val1bz)
-	assert.DeepEqual(t, validators[0].ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
-	assert.DeepEqual(t, validators[1].ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[1])
+	assert.DeepEqual(t, validators[0].ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
+	assert.DeepEqual(t, validators[1].ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[1])
 
 	applyValidatorSetUpdates(t, f.sdkCtx, f.stakingKeeper, 0)
 
@@ -791,18 +795,18 @@ func TestApplyAndReturnValidatorSetUpdatesNewValidator(t *testing.T) {
 	validator, _ = f.stakingKeeper.GetValidator(f.sdkCtx, valbz)
 	validators[0], _ = f.stakingKeeper.GetValidator(f.sdkCtx, val0bz)
 	validators[1], _ = f.stakingKeeper.GetValidator(f.sdkCtx, val1bz)
-	assert.DeepEqual(t, validator.ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
-	assert.DeepEqual(t, validators[0].ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[1])
-	assert.DeepEqual(t, validators[1].ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[2])
+	assert.DeepEqual(t, validator.ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
+	assert.DeepEqual(t, validators[0].ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[1])
+	assert.DeepEqual(t, validators[1].ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[2])
 }
 
 func TestApplyAndReturnValidatorSetUpdatesBondTransition(t *testing.T) {
 	f, _, _ := bootstrapValidatorTest(t, 1000, 20)
-	params, err := f.stakingKeeper.Params.Get(f.sdkCtx)
+	params, err := f.stakingKeeper.GetParams(f.sdkCtx)
 	assert.NilError(t, err)
 	params.MaxValidators = uint32(2)
 
-	assert.NilError(t, f.stakingKeeper.Params.Set(f.sdkCtx, params))
+	assert.NilError(t, f.stakingKeeper.SetParams(f.sdkCtx, params))
 
 	powers := []int64{100, 200, 300}
 	var validators [3]types.Validator
@@ -828,8 +832,8 @@ func TestApplyAndReturnValidatorSetUpdatesBondTransition(t *testing.T) {
 	assert.NilError(t, err)
 	validators[2], _ = f.stakingKeeper.GetValidator(f.sdkCtx, val2bz)
 	validators[1], _ = f.stakingKeeper.GetValidator(f.sdkCtx, val1bz)
-	assert.DeepEqual(t, validators[2].ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
-	assert.DeepEqual(t, validators[1].ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[1])
+	assert.DeepEqual(t, validators[2].ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
+	assert.DeepEqual(t, validators[1].ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[1])
 
 	applyValidatorSetUpdates(t, f.sdkCtx, f.stakingKeeper, 0)
 
@@ -871,13 +875,14 @@ func TestApplyAndReturnValidatorSetUpdatesBondTransition(t *testing.T) {
 
 	// verify initial CometBFT updates are correct
 	updates = applyValidatorSetUpdates(t, f.sdkCtx, f.stakingKeeper, 1)
-	assert.DeepEqual(t, validators[1].ModuleValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
+	assert.DeepEqual(t, validators[1].ABCIValidatorUpdate(f.stakingKeeper.PowerReduction(f.sdkCtx)), updates[0])
 
 	applyValidatorSetUpdates(t, f.sdkCtx, f.stakingKeeper, 0)
 }
 
-func applyValidatorSetUpdates(t *testing.T, ctx sdk.Context, k *keeper.Keeper, expectedUpdatesLen int) []module.ValidatorUpdate {
+func applyValidatorSetUpdates(t *testing.T, ctx sdk.Context, k *keeper.Keeper, expectedUpdatesLen int) []abci.ValidatorUpdate {
 	t.Helper()
+
 	updates, err := k.ApplyAndReturnValidatorSetUpdates(ctx)
 	assert.NilError(t, err)
 	if expectedUpdatesLen >= 0 {

@@ -24,8 +24,6 @@ import (
 	"github.com/spf13/viper"
 	"golang.org/x/sync/errgroup"
 
-	corectx "cosmossdk.io/core/context"
-	corestore "cosmossdk.io/core/store"
 	"cosmossdk.io/log"
 	"cosmossdk.io/store"
 	"cosmossdk.io/store/snapshots"
@@ -46,9 +44,6 @@ import (
 // a command's Context.
 const ServerContextKey = sdk.ContextKey("server.context")
 
-// Context is the server context.
-// Prefer using we use viper a it tracks track all config.
-// See core/context/server_context.go.
 type Context struct {
 	Viper  *viper.Viper
 	Config *cmtcfg.Config
@@ -76,7 +71,7 @@ func bindFlags(basename string, cmd *cobra.Command, v *viper.Viper) (err error) 
 
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
 		// Environment variables can't have dashes in them, so bind them to their equivalent
-		// keys with underscores, e.g. --favorite-color to STING_FAVORITE_COLOR
+		// keys with underscores, e.g. --favorite-color to STRING_FAVORITE_COLOR
 		err = v.BindEnv(f.Name, fmt.Sprintf("%s_%s", basename, strings.ToUpper(strings.ReplaceAll(f.Name, "-", "_"))))
 		if err != nil {
 			panic(err)
@@ -103,7 +98,7 @@ func bindFlags(basename string, cmd *cobra.Command, v *viper.Viper) (err error) 
 
 // InterceptConfigsPreRunHandler is identical to InterceptConfigsAndCreateContext
 // except it also sets the server context on the command and the server logger.
-func InterceptConfigsPreRunHandler(cmd *cobra.Command, customAppConfigTemplate string, customAppConfig interface{}, cmtConfig *cmtcfg.Config) error {
+func InterceptConfigsPreRunHandler(cmd *cobra.Command, customAppConfigTemplate string, customAppConfig any, cmtConfig *cmtcfg.Config) error {
 	serverCtx, err := InterceptConfigsAndCreateContext(cmd, customAppConfigTemplate, customAppConfig, cmtConfig)
 	if err != nil {
 		return err
@@ -130,7 +125,7 @@ func InterceptConfigsPreRunHandler(cmd *cobra.Command, customAppConfigTemplate s
 // is used to read and parse the application configuration. Command handlers can
 // fetch the server Context to get the CometBFT configuration or to get access
 // to Viper.
-func InterceptConfigsAndCreateContext(cmd *cobra.Command, customAppConfigTemplate string, customAppConfig interface{}, cmtConfig *cmtcfg.Config) (*Context, error) {
+func InterceptConfigsAndCreateContext(cmd *cobra.Command, customAppConfigTemplate string, customAppConfig any, cmtConfig *cmtcfg.Config) (*Context, error) {
 	serverCtx := NewDefaultContext()
 
 	// Get the executable name and configure the viper instance so that environmental
@@ -182,6 +177,15 @@ func CreateSDKLogger(ctx *Context, out io.Writer) (log.Logger, error) {
 		// We use CometBFT flag (cmtcli.TraceFlag) for trace logging.
 		log.TraceOption(ctx.Viper.GetBool(FlagTrace)))
 
+	verboseLogLevelStr := ctx.Viper.GetString(flags.FlagVerboseLogLevel)
+	if verboseLogLevelStr != "" {
+		verboseLogLvl, err := parseVerboseLogLevel(verboseLogLevelStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid verbose log level: %s: %w", verboseLogLevelStr, err)
+		}
+		opts = append(opts, log.VerboseLevelOption(verboseLogLvl))
+	}
+
 	// check and set filter level or keys for the logger if any
 	logLvlStr := ctx.Viper.GetString(flags.FlagLogLevel)
 	if logLvlStr == "" {
@@ -205,6 +209,14 @@ func CreateSDKLogger(ctx *Context, out io.Writer) (log.Logger, error) {
 	return log.NewLogger(out, opts...), nil
 }
 
+// parseVerboseLogLevel parses the string "none" as zerolog.NoLevel and all other level strings using zerolog.ParseLevel.
+func parseVerboseLogLevel(verboseLogLevelStr string) (zerolog.Level, error) {
+	if verboseLogLevelStr == "none" {
+		return zerolog.NoLevel, nil
+	}
+	return zerolog.ParseLevel(verboseLogLevelStr)
+}
+
 // GetServerContextFromCmd returns a Context from a command or an empty Context
 // if it has not been set.
 func GetServerContextFromCmd(cmd *cobra.Command) *Context {
@@ -219,19 +231,13 @@ func GetServerContextFromCmd(cmd *cobra.Command) *Context {
 // SetCmdServerContext sets a command's Context value to the provided argument.
 // If the context has not been set, set the given context as the default.
 func SetCmdServerContext(cmd *cobra.Command, serverCtx *Context) error {
-	var cmdCtx context.Context
-
-	if cmd.Context() == nil {
-		cmdCtx = context.Background()
-	} else {
-		cmdCtx = cmd.Context()
+	v := cmd.Context().Value(ServerContextKey)
+	if v == nil {
+		v = serverCtx
 	}
 
-	cmdCtx = context.WithValue(cmdCtx, ServerContextKey, serverCtx)
-	cmdCtx = context.WithValue(cmdCtx, corectx.ViperContextKey, serverCtx.Viper)
-	cmdCtx = context.WithValue(cmdCtx, corectx.LoggerContextKey, serverCtx.Logger)
-
-	cmd.SetContext(cmdCtx)
+	serverCtxPtr := v.(*Context)
+	*serverCtxPtr = *serverCtx
 
 	return nil
 }
@@ -241,7 +247,7 @@ func SetCmdServerContext(cmd *cobra.Command, serverCtx *Context) error {
 // configuration file. The CometBFT configuration file is parsed given a root
 // Viper object, whereas the application is parsed with the private package-aware
 // viperCfg object.
-func interceptConfigs(rootViper *viper.Viper, customAppTemplate string, customConfig interface{}, cmtConfig *cmtcfg.Config) (*cmtcfg.Config, error) {
+func interceptConfigs(rootViper *viper.Viper, customAppTemplate string, customConfig any, cmtConfig *cmtcfg.Config) (*cmtcfg.Config, error) {
 	rootDir := rootViper.GetString(flags.FlagHome)
 	configPath := filepath.Join(rootDir, "config")
 	cmtCfgFile := filepath.Join(configPath, "config.toml")
@@ -292,31 +298,21 @@ func interceptConfigs(rootViper *viper.Viper, customAppTemplate string, customCo
 
 	appCfgFilePath := filepath.Join(configPath, "app.toml")
 	if _, err := os.Stat(appCfgFilePath); os.IsNotExist(err) {
-		if (customAppTemplate != "" && customConfig == nil) || (customAppTemplate == "" && customConfig != nil) {
-			return nil, errors.New("customAppTemplate and customConfig should be both nil or not nil")
-		}
-
 		if customAppTemplate != "" {
-			if err := config.SetConfigTemplate(customAppTemplate); err != nil {
-				return nil, fmt.Errorf("failed to set config template: %w", err)
-			}
+			config.SetConfigTemplate(customAppTemplate)
 
 			if err = rootViper.Unmarshal(&customConfig); err != nil {
 				return nil, fmt.Errorf("failed to parse %s: %w", appCfgFilePath, err)
 			}
 
-			if err := config.WriteConfigFile(appCfgFilePath, customConfig); err != nil {
-				return nil, fmt.Errorf("failed to write %s: %w", appCfgFilePath, err)
-			}
+			config.WriteConfigFile(appCfgFilePath, customConfig)
 		} else {
 			appConf, err := config.ParseConfig(rootViper)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse %s: %w", appCfgFilePath, err)
 			}
 
-			if err := config.WriteConfigFile(appCfgFilePath, appConf); err != nil {
-				return nil, fmt.Errorf("failed to write %s: %w", appCfgFilePath, err)
-			}
+			config.WriteConfigFile(appCfgFilePath, appConf)
 		}
 	}
 
@@ -331,8 +327,7 @@ func interceptConfigs(rootViper *viper.Viper, customAppTemplate string, customCo
 	return conf, nil
 }
 
-// AddCommands add server commands
-func AddCommands[T types.Application](rootCmd *cobra.Command, appCreator types.AppCreator[T], opts StartCmdOptions[T]) {
+func AddCommands(rootCmd *cobra.Command, defaultNodeHome string, appCreator types.AppCreator, appExport types.AppExporter, addStartFlags types.ModuleInitFlags) {
 	cometCmd := &cobra.Command{
 		Use:     "comet",
 		Aliases: []string{"cometbft", "tendermint"},
@@ -349,29 +344,58 @@ func AddCommands[T types.Application](rootCmd *cobra.Command, appCreator types.A
 		BootstrapStateCmd(appCreator),
 	)
 
-	startCmd := StartCmdWithOptions(appCreator, opts)
+	startCmd := StartCmd(appCreator, defaultNodeHome)
+	addStartFlags(startCmd)
+
 	rootCmd.AddCommand(
 		startCmd,
 		cometCmd,
+		ExportCmd(appExport, defaultNodeHome),
 		version.NewVersionCommand(),
-		NewRollbackCmd(appCreator),
+		NewRollbackCmd(appCreator, defaultNodeHome),
 		ModuleHashByHeightQuery(appCreator),
 	)
 }
 
 // AddCommandsWithStartCmdOptions adds server commands with the provided StartCmdOptions.
-// Deprecated: Use AddCommands directly instead.
-func AddCommandsWithStartCmdOptions[T types.Application](rootCmd *cobra.Command, appCreator types.AppCreator[T], opts StartCmdOptions[T]) {
-	AddCommands(rootCmd, appCreator, opts)
+func AddCommandsWithStartCmdOptions(rootCmd *cobra.Command, defaultNodeHome string, appCreator types.AppCreator, appExport types.AppExporter, opts StartCmdOptions) {
+	cometCmd := &cobra.Command{
+		Use:     "comet",
+		Aliases: []string{"cometbft", "tendermint"},
+		Short:   "CometBFT subcommands",
+	}
+
+	cometCmd.AddCommand(
+		ShowNodeIDCmd(),
+		ShowValidatorCmd(),
+		ShowAddressCmd(),
+		VersionCmd(),
+		cmtcmd.ResetAllCmd,
+		cmtcmd.ResetStateCmd,
+		BootstrapStateCmd(appCreator),
+	)
+
+	startCmd := StartCmdWithOptions(appCreator, defaultNodeHome, opts)
+
+	rootCmd.AddCommand(
+		startCmd,
+		cometCmd,
+		ExportCmd(appExport, defaultNodeHome),
+		version.NewVersionCommand(),
+		NewRollbackCmd(appCreator, defaultNodeHome),
+	)
 }
 
 // AddTestnetCreatorCommand allows chains to create a testnet from the state existing in their node's data directory.
-func AddTestnetCreatorCommand[T types.Application](rootCmd *cobra.Command, appCreator types.AppCreator[T]) {
+func AddTestnetCreatorCommand(rootCmd *cobra.Command, appCreator types.AppCreator, addStartFlags types.ModuleInitFlags) {
 	testnetCreateCmd := InPlaceTestnetCreator(appCreator)
+	addStartFlags(testnetCreateCmd)
 	rootCmd.AddCommand(testnetCreateCmd)
 }
 
-// ExternalIP https://stackoverflow.com/questions/23558425/how-do-i-get-the-local-ip-address-in-go
+// ExternalIP gets the external IP address of the machine.
+//
+// https://stackoverflow.com/questions/23558425/how-do-i-get-the-local-ip-address-in-go
 // TODO there must be a better way to get external IP
 func ExternalIP() (string, error) {
 	ifaces, err := net.Interfaces()
@@ -473,15 +497,14 @@ func addrToIP(addr net.Addr) net.IP {
 	return ip
 }
 
-// OpenDB opens the application database using the appropriate driver.
-func OpenDB(rootDir string, backendType dbm.BackendType) (corestore.KVStoreWithBatch, error) {
+func openDB(rootDir string, backendType dbm.BackendType) (dbm.DB, error) {
 	dataDir := filepath.Join(rootDir, "data")
 	return dbm.NewDB("application", backendType, dataDir)
 }
 
 func openTraceWriter(traceWriterFile string) (w io.WriteCloser, err error) {
 	if traceWriterFile == "" {
-		return
+		return w, err
 	}
 	return os.OpenFile(
 		traceWriterFile,
@@ -507,7 +530,12 @@ func DefaultBaseappOptions(appOpts types.AppOptions) []func(*baseapp.BaseApp) {
 	chainID := cast.ToString(appOpts.Get(flags.FlagChainID))
 	if chainID == "" {
 		// fallback to genesis chain-id
-		reader, err := os.Open(filepath.Join(homeDir, "config", "genesis.json"))
+		genesisPathCfg, _ := appOpts.Get("genesis_file").(string)
+		if genesisPathCfg == "" {
+			genesisPathCfg = filepath.Join("config", "genesis.json")
+		}
+
+		reader, err := os.Open(filepath.Join(homeDir, genesisPathCfg))
 		if err != nil {
 			panic(err)
 		}
@@ -550,6 +578,7 @@ func DefaultBaseappOptions(appOpts types.AppOptions) []func(*baseapp.BaseApp) {
 		baseapp.SetSnapshot(snapshotStore, snapshotOptions),
 		baseapp.SetIAVLCacheSize(cast.ToInt(appOpts.Get(FlagIAVLCacheSize))),
 		baseapp.SetIAVLDisableFastNode(cast.ToBool(appOpts.Get(FlagDisableIAVLFastNode))),
+		baseapp.SetIAVLSyncPruning(cast.ToBool(appOpts.Get(FlagIAVLSyncPruning))),
 		defaultMempool,
 		baseapp.SetChainID(chainID),
 		baseapp.SetQueryGasLimit(cast.ToUint64(appOpts.Get(FlagQueryGasLimit))),

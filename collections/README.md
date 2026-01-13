@@ -90,7 +90,7 @@ Since a module can have multiple collections, the following is expected:
 We don't want a collection to write over the state of the other collection so we pass it a prefix, which defines a storage
 partition owned by the collection.
 
-If you already built modules, the prefix translates to the items you were creating in your ``types/keys.go`` file, example: https://github.com/cosmos/cosmos-sdk/blob/main/x/feegrant/key.go#L27
+If you already built modules, the prefix translates to the items you were creating in your ``types/keys.go`` file, example: https://github.com/cosmos/cosmos-sdk/blob/v0.52.0-rc.1/x/feegrant/key.go#L16~L22
 
 your old:
 
@@ -122,7 +122,7 @@ var (
 
 #### Rules
 
-``collections.NewPrefix`` accepts either `uint8`, `string` or `[]bytes` it's good practice to use an always increasing `uint8`for disk space efficiency.
+``collections.NewPrefix`` accepts either `uint8`, `string` or `[]bytes` it's good practice to use an always increasing `uint8` for disk space efficiency.
 
 A collection **MUST NOT** share the same prefix as another collection in the same module, and a collection prefix **MUST NEVER** start with the same prefix as another, examples:
 
@@ -397,7 +397,7 @@ func (k Keeper) RemoveValidator(ctx sdk.Context, validator sdk.ValAddress) error
 }
 ```
 
-The first difference we notice is that `KeySet` needs use to specify only one type parameter: the key (`sdk.ValAddress` in this case).
+The first difference we notice is that `KeySet` needs us to specify only one type parameter: the key (`sdk.ValAddress` in this case).
 The second difference we notice is that `KeySet` in its `NewKeySet` function does not require
 us to specify a `ValueCodec` but only a `KeyCodec`. This is because a `KeySet` only saves keys and not values.
 
@@ -423,7 +423,7 @@ The third type of collection is the `collections.Item`.
 It stores only one single item, it's useful for example for parameters, there's only one instance
 of parameters in state always.
 
-#### implementation curiosity
+### implementation curiosity
 
 A `collections.Item` is just a `collections.Map` with no key but just a value.
 The key is the prefix of the collection!
@@ -605,7 +605,7 @@ we specified in the range.
 Then we use again the `Values` method of the `Iterator` to collect all the results.
 
 `collections.Range` also offers a `Prefix` API which is not applicable to all keys types,
-for example uint64 cannot be prefix because it is of constant size, but a `string` key
+for example uint64 cannot be prefixed because it is of constant size, but a `string` key
 can be prefixed.
 
 #### IterateAccounts
@@ -648,7 +648,7 @@ Let's see now how we can work with composite keys using collections.
 
 ### Example
 
-In our example we will show-case how we can use collections when we are dealing with balances, similar to bank,
+In our example we will showcase how we can use collections when we are dealing with balances, similar to bank,
 a balance is a mapping between `(address, denom) => math.Int` the composite key in our case is `(address, denom)`.
 
 ## Instantiation of a composite key collection
@@ -683,7 +683,7 @@ func NewKeeper(storeKey *storetypes.KVStoreKey) Keeper {
 }
 ```
 
-#### The Map Key definition
+### The Map Key definition
 
 First of all we can see that in order to define a composite key of two elements we use the `collections.Pair` type:
 
@@ -819,7 +819,7 @@ type BaseAccount struct {
 ```
 
 First of all, when we save our accounts in state we map them using a primary key `sdk.AccAddress`.
-If it were to be a `collections.Map` it would be `collections.Map[sdk.AccAddres, authtypes.BaseAccount]`.
+If it were to be a `collections.Map` it would be `collections.Map[sdk.AccAddress, authtypes.BaseAccount]`.
 
 Then we also want to be able to get an account not only by its `sdk.AccAddress`, but also by its `AccountNumber`.
 

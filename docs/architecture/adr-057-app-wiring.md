@@ -4,7 +4,6 @@
 
 * 2022-05-04: Initial Draft
 * 2022-08-19: Updates
-* 2024-01-12: Updates
 
 ## Status
 
@@ -39,7 +38,7 @@ In order to improve the current situation, a new "app wiring" paradigm has been 
 involves:
 
 * declaration configuration of the modules in an app which can be serialized to JSON or YAML
-* a dependency-injection (DI) framework for instantiating apps from the that configuration
+* a dependency-injection (DI) framework for instantiating apps from the configuration
 
 ### Dependency Injection
 
@@ -80,6 +79,7 @@ of protobuf and its basic structure is very simple:
 
 ```protobuf
 package cosmos.app.v1;
+
 message Config {
   repeated ModuleConfig modules = 1;
 }
@@ -90,7 +90,9 @@ message ModuleConfig {
 }
 ```
 
-The configuration for every module is a protobuf message and modules will be identified and loaded based
+(See also https://github.com/cosmos/cosmos-sdk/blob/6e18f582bf69e3926a1e22a6de3c35ea327aadce/proto/cosmos/app/v1alpha1/config.proto)
+
+The configuration for every module is itself a protobuf message and modules will be identified and loaded based
 on the protobuf type URL of their config object (ex. `cosmos.bank.module.v1.Module`). Modules are given a unique short `name`
 to share resources across different versions of the same module which might have a different protobuf package
 versions (ex. `cosmos.bank.module.v2.Module`). All module config objects should define the `cosmos.app.v1alpha1.module`
@@ -179,13 +181,13 @@ Ex:
 
 ```go
 func init() {
-	appconfig.Register("cosmos.bank.module.v1.Module",
-		appconfig.Types(
+	appmodule.Register("cosmos.bank.module.v1.Module",
+		appmodule.Types(
 			types.Types_tx_proto,
             types.Types_query_proto,
             types.Types_types_proto,
 	    ),
-	    appconfig.Provide(
+	    appmodule.Provide(
 			provideBankModule,
 	    )
 	)
@@ -227,8 +229,8 @@ import (
 	// Each go package which registers a module must be imported just for side-effects
 	// so that module implementations are registered.
 	_ "github.com/cosmos/cosmos-sdk/x/auth/module"
-	_ "cosmossdk.io/x/bank/module"
-	_ "cosmossdk.io/x/staking/module"
+	_ "github.com/cosmos/cosmos-sdk/x/bank/module"
+	_ "github.com/cosmos/cosmos-sdk/x/staking/module"
 	"github.com/cosmos/cosmos-sdk/core/app"
 )
 
@@ -256,9 +258,9 @@ which consumes these hooks can collect these hooks as a map of module name to ho
 
 ```go
 func init() {
-    appconfig.RegisterModule(
+    appmodule.Register(
         &foomodulev1.Module{},
-        appconfig.Invoke(InvokeSetFooHooks),
+        appmodule.Invoke(InvokeSetFooHooks),
 	    ...
     )
 }
@@ -287,8 +289,6 @@ With the approach proposed here, hooks registration will be obviously observable
 
 ### Code Generation
 
-> Not yet implemented
-
 The `depinject` framework will optionally allow the app configuration and dependency injection wiring to be code
 generated. This will allow:
 
@@ -305,14 +305,14 @@ change to a module should be handled as follows:
 * the semantic major version should be incremented, and
 * a new semantically versioned module config protobuf type should be created.
 
-For instance, if we have the SDK module for bank in the go module `cosmossdk.io/x/bank` with the module config type
+For instance, if we have the SDK module for bank in the go module `github.com/cosmos/cosmos-sdk/x/bank` with the module config type
 `cosmos.bank.module.v1.Module`, and we want to make a state machine breaking change to the module, we would:
 
-* create a new go module `cosmossdk.io/x/bank/v2`,
+* create a new go module `github.com/cosmos/cosmos-sdk/x/bank/v2`,
 * with the module config protobuf type `cosmos.bank.module.v2.Module`.
 
 This *does not* mean that we need to increment the protobuf API version for bank. Both modules can support
-`cosmos.bank.v1`, but `cosmossdk.io/x/bank/v2` will be a separate go module with a separate module config type.
+`cosmos.bank.v1`, but `github.com/cosmos/cosmos-sdk/x/bank/v2` will be a separate go module with a separate module config type.
 
 This practice will eventually allow us to use appconfig to load new versions of a module via a configuration change.
 

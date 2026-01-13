@@ -1,7 +1,7 @@
 package node
 
 import (
-	"context"
+	context "context"
 
 	gogogrpc "github.com/cosmos/gogoproto/grpc"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -50,7 +50,7 @@ func (s queryServer) Config(ctx context.Context, _ *ConfigRequest) (*ConfigRespo
 func (s queryServer) Status(ctx context.Context, _ *StatusRequest) (*StatusResponse, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 
-	blockTime := sdkCtx.HeaderInfo().Time
+	blockTime := sdkCtx.BlockTime()
 
 	return &StatusResponse{
 		// TODO: Get earliest version from store.

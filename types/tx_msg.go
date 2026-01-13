@@ -2,13 +2,12 @@ package types
 
 import (
 	"encoding/json"
-	"fmt"
-	"strings"
+	fmt "fmt"
+	strings "strings"
 	"time"
 
-	"google.golang.org/protobuf/reflect/protoreflect"
-
-	"cosmossdk.io/core/transaction"
+	"github.com/cosmos/gogoproto/proto"
+	protov2 "google.golang.org/protobuf/proto"
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
@@ -17,7 +16,7 @@ import (
 
 type (
 	// Msg defines the interface a transaction message needed to fulfill.
-	Msg = transaction.Msg
+	Msg = proto.Message
 
 	// LegacyMsg defines the interface a transaction message needed to fulfill up through
 	// v0.47.
@@ -30,14 +29,14 @@ type (
 		GetSigners() []AccAddress
 	}
 
-	// Fee defines an interface for an application application-defined concrete
+	// Fee defines an interface for an application-defined concrete
 	// transaction type to be able to set and return the transaction fee.
 	Fee interface {
 		GetGas() uint64
 		GetAmount() Coins
 	}
 
-	// Signature defines an interface for an application application-defined
+	// Signature defines an interface for an application-defined
 	// concrete transaction type to be able to set and return transaction signatures.
 	Signature interface {
 		GetPubKey() cryptotypes.PubKey
@@ -52,17 +51,10 @@ type (
 
 	// Tx defines an interface a transaction must fulfill.
 	Tx interface {
-		transaction.Tx
-
 		HasMsgs
 
-		// GetReflectMessages gets a reflected version of the transaction's messages
-		// that can be used by dynamic APIs. These messages should not be used for actual
-		// processing as they cannot be guaranteed to be what handlers are expecting, but
-		// they can be used for dynamically reading specific fields from the message such
-		// as signers or validation data. Message processors should ALWAYS use the messages
-		// returned by GetMsgs.
-		GetReflectMessages() ([]protoreflect.Message, error)
+		// GetMsgsV2 gets the transaction's messages as google.golang.org/protobuf/proto.Message's.
+		GetMsgsV2() ([]protov2.Message, error)
 	}
 
 	// FeeTx defines the interface to be implemented by Tx to use the FeeDecorators
@@ -85,6 +77,8 @@ type (
 	TxWithTimeoutTimeStamp interface {
 		Tx
 
+		// GetTimeoutTimeStamp gets the timeout timestamp for the tx.
+		// IMPORTANT: when the uint value is needed here, you MUST use UnixNano.
 		GetTimeoutTimeStamp() time.Time
 	}
 

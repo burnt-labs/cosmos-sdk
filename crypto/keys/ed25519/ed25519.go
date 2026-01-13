@@ -3,7 +3,6 @@ package ed25519
 import (
 	"crypto/ed25519"
 	"crypto/subtle"
-	"errors"
 	"fmt"
 	"io"
 
@@ -15,7 +14,7 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
-	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+	"github.com/cosmos/cosmos-sdk/types/errors"
 )
 
 //-------------------------------------
@@ -27,7 +26,7 @@ const (
 	PubKeySize = 32
 	// PrivKeySize is the size, in bytes, of private keys as used in this package.
 	PrivKeySize = 64
-	// SignatureSize the size of an Edwards25519 signature. Namely the size of a compressed
+	// SignatureSize is the size of an Edwards25519 signature. Namely the size of a compressed
 	// Edwards25519 point, and a field element. Both of which are 32 bytes.
 	SignatureSize = 64
 	// SeedSize is the size, in bytes, of private key seeds. These are the
@@ -103,7 +102,7 @@ func (privKey PrivKey) MarshalAmino() ([]byte, error) {
 // UnmarshalAmino overrides Amino binary marshaling.
 func (privKey *PrivKey) UnmarshalAmino(bz []byte) error {
 	if len(bz) != PrivKeySize {
-		return errors.New("invalid privkey size")
+		return fmt.Errorf("invalid privkey size")
 	}
 	privKey.Key = bz
 
@@ -212,7 +211,7 @@ func (pubKey PubKey) MarshalAmino() ([]byte, error) {
 // UnmarshalAmino overrides Amino binary marshaling.
 func (pubKey *PubKey) UnmarshalAmino(bz []byte) error {
 	if len(bz) != PubKeySize {
-		return errorsmod.Wrap(sdkerrors.ErrInvalidPubKey, "invalid pubkey size")
+		return errorsmod.Wrap(errors.ErrInvalidPubKey, "invalid pubkey size")
 	}
 	pubKey.Key = bz
 

@@ -4,9 +4,9 @@ import (
 	fmt "fmt"
 	"testing"
 
+	dbm "github.com/cosmos/cosmos-db"
 	"github.com/stretchr/testify/require"
 
-	coretesting "cosmossdk.io/core/testing"
 	"cosmossdk.io/store/cachekv"
 	"cosmossdk.io/store/dbadapter"
 	"cosmossdk.io/store/types"
@@ -14,7 +14,7 @@ import (
 
 func DoBenchmarkDeepCacheStack(b *testing.B, depth int) {
 	b.Helper()
-	db := coretesting.NewMemDB()
+	db := dbm.NewMemDB()
 	initialStore := cachekv.NewStore(dbadapter.Store{DB: db})
 
 	nItems := 20
@@ -68,7 +68,7 @@ func BenchmarkDeepCacheStack13(b *testing.B) {
 type CacheStack struct {
 	initialStore types.CacheKVStore
 	// Context of the initial state before transaction execution.
-	// It's the context used by `StateDB.CommitedState`.
+	// It's the context used by `StateDB.CommittedState`.
 	cacheStores []types.CacheKVStore
 }
 

@@ -103,7 +103,7 @@ vote extensions.
 We propose the following new handlers for applications to implement:
 
 ```go
-type ExtendVoteHandler func(sdk.Context, abci.ExtendVoteRequest) abci.ExtendVoteResponse
+type ExtendVoteHandler func(sdk.Context, abci.RequestExtendVote) abci.ResponseExtendVote
 type VerifyVoteExtensionHandler func(sdk.Context, abci.RequestVerifyVoteExtension) abci.ResponseVerifyVoteExtension
 ```
 
@@ -144,7 +144,7 @@ type VoteExtensionHandler struct {
 
 // ExtendVoteHandler can do something with h.mk and possibly h.state to create
 // a vote extension, such as fetching a series of prices for supported assets.
-func (h VoteExtensionHandler) ExtendVoteHandler(ctx sdk.Context, req abci.ExtendVoteRequest) abci.ExtendVoteResponse {
+func (h VoteExtensionHandler) ExtendVoteHandler(ctx sdk.Context, req abci.RequestExtendVote) abci.ResponseExtendVote {
 	prices := GetPrices(ctx, h.mk.Assets())
 	bz, err := EncodePrices(h.cdc, prices)
 	if err != nil {
@@ -156,7 +156,7 @@ func (h VoteExtensionHandler) ExtendVoteHandler(ctx sdk.Context, req abci.Extend
 	// NOTE: Vote extensions can be overridden since we can timeout in a round.
 	SetPrices(h.state, req, bz)
 
-	return abci.ExtendVoteResponse{VoteExtension: bz}
+	return abci.ResponseExtendVote{VoteExtension: bz}
 }
 
 // VerifyVoteExtensionHandler can do something with h.state and req to verify
@@ -286,7 +286,7 @@ decision based on the vote extensions.
 > nor the vote extension verification mechanism described above is required for
 > applications to implement. In other words, a proposer is not required to verify
 > and propagate vote extensions along with their signatures nor are proposers
-> required to verify those signatures. An application can implement it's own
+> required to verify those signatures. An application can implement its own
 > PKI mechanism and use that to sign and verify vote extensions.
 
 #### Vote Extension Persistence
@@ -396,12 +396,12 @@ and rely on existing events, especially since applications will still define
 In order to facilitate existing event functionality, we propose that all `BeginBlock`
 and `EndBlock` events have a dedicated `EventAttribute` with `key=block` and
 `value=begin_block|end_block`. The `EventAttribute` will be appended to each event
-in both `BeginBlock` and `EndBlock` events`. 
+in both `BeginBlock` and `EndBlock` events. 
 
 
 ### Upgrading
 
-CometBFT defines a consensus parameter, [`VoteExtensionsEnableHeight`](https://docs.cometbft.com/v1.0/spec/abci/abci++_app_requirements#featureparamsvoteextensionsenableheight),
+CometBFT defines a consensus parameter, [`VoteExtensionsEnableHeight`](https://github.com/cometbft/cometbft/blob/v0.38.0-alpha.1/spec/abci/abci%2B%2B_app_requirements.md#abciparamsvoteextensionsenableheight),
 which specifies the height at which vote extensions are enabled and **required**.
 If the value is set to zero, which is the default, then vote extensions are
 disabled and an application is not required to implement and use vote extensions.

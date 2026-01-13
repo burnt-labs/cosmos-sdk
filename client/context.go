@@ -15,8 +15,6 @@ import (
 	"google.golang.org/grpc"
 	"sigs.k8s.io/yaml"
 
-	"cosmossdk.io/core/address"
-
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
@@ -29,8 +27,10 @@ type PreprocessTxFn func(chainID string, key keyring.KeyType, tx TxBuilder) erro
 // Context implements a typical context created in SDK modules for transaction
 // handling and queries.
 type Context struct {
+	FromAddress           sdk.AccAddress
 	Client                CometRPC
 	GRPCClient            *grpc.ClientConn
+	GRPCConnProvider      *GRPCConnProvider
 	ChainID               string
 	Codec                 codec.Codec
 	InterfaceRegistry     codectypes.InterfaceRegistry
@@ -43,28 +43,23 @@ type Context struct {
 	OutputFormat          string
 	Height                int64
 	HomeDir               string
-	// From is a name or an address of a keyring account used to set FromName and FromAddress fields.
-	// Should be set by the "from" flag.
-	From string
-	// Name of a keyring account used to sign transactions.
-	FromName string
-	// Address of a keyring account used to sign transactions.
-	FromAddress       sdk.AccAddress
-	BroadcastMode     string
-	SignModeStr       string
-	UseLedger         bool
-	Simulate          bool
-	GenerateOnly      bool
-	Offline           bool
-	SkipConfirm       bool
-	TxConfig          TxConfig
-	AccountRetriever  AccountRetriever
-	NodeURI           string
-	FeePayer          sdk.AccAddress
-	FeeGranter        sdk.AccAddress
-	Viper             *viper.Viper
-	LedgerHasProtobuf bool
-	PreprocessTxHook  PreprocessTxFn
+	From                  string
+	BroadcastMode         string
+	FromName              string
+	SignModeStr           string
+	UseLedger             bool
+	Simulate              bool
+	GenerateOnly          bool
+	Offline               bool
+	SkipConfirm           bool
+	TxConfig              TxConfig
+	AccountRetriever      AccountRetriever
+	NodeURI               string
+	FeePayer              sdk.AccAddress
+	FeeGranter            sdk.AccAddress
+	Viper                 *viper.Viper
+	LedgerHasProtobuf     bool
+	PreprocessTxHook      PreprocessTxFn
 
 	// IsAux is true when the signer is an auxiliary signer (e.g. the tipper).
 	IsAux bool
@@ -74,15 +69,6 @@ type Context struct {
 
 	// CmdContext is the context.Context from the Cobra command.
 	CmdContext context.Context
-
-	// Address codecs
-	AddressCodec          address.Codec
-	ValidatorAddressCodec address.Codec
-	ConsensusAddressCodec address.Codec
-
-	// Bech32 address prefixes.
-	AddressPrefix   string
-	ValidatorPrefix string
 }
 
 // WithCmdContext returns a copy of the context with an updated context.Context,
@@ -107,7 +93,7 @@ func (ctx Context) WithKeyringOptions(opts ...keyring.Option) Context {
 // WithInput returns a copy of the context with an updated input.
 func (ctx Context) WithInput(r io.Reader) Context {
 	// convert to a bufio.Reader to have a shared buffer between the keyring and the
-	// Commands, ensuring a read from one advance the read pointer for the other.
+	// the Commands, ensuring a read from one advance the read pointer for the other.
 	// see https://github.com/cosmos/cosmos-sdk/issues/9566.
 	ctx.Input = bufio.NewReader(r)
 	return ctx
@@ -168,6 +154,22 @@ func (ctx Context) WithClient(client CometRPC) Context {
 func (ctx Context) WithGRPCClient(grpcClient *grpc.ClientConn) Context {
 	ctx.GRPCClient = grpcClient
 	return ctx
+}
+
+// WithGRPCConnProvider returns a copy of the context with an updated GRPCConnProvider.
+func (ctx Context) WithGRPCConnProvider(provider *GRPCConnProvider) Context {
+	ctx.GRPCConnProvider = provider
+	return ctx
+}
+
+// GetGRPCConn returns the appropriate gRPC connection for the given height.
+// If GRPCConnProvider is set, it uses it to determine the connection.
+// Otherwise, it falls back to the default GRPCClient.
+func (ctx Context) GetGRPCConn(height int64) *grpc.ClientConn {
+	if ctx.GRPCConnProvider != nil {
+		return ctx.GRPCConnProvider.GetGRPCConn(height)
+	}
+	return ctx.GRPCClient
 }
 
 // WithUseLedger returns a copy of the context with an updated UseLedger flag.
@@ -323,34 +325,13 @@ func (ctx Context) WithPreprocessTxHook(preprocessFn PreprocessTxFn) Context {
 	return ctx
 }
 
-// WithAddressCodec returns the context with the provided address codec.
-func (ctx Context) WithAddressCodec(addressCodec address.Codec) Context {
-	ctx.AddressCodec = addressCodec
-	return ctx
-}
-
-// WithValidatorAddressCodec returns the context with the provided validator address codec.
-func (ctx Context) WithValidatorAddressCodec(validatorAddressCodec address.Codec) Context {
-	ctx.ValidatorAddressCodec = validatorAddressCodec
-	return ctx
-}
-
-// WithConsensusAddressCodec returns the context with the provided consensus address codec.
-func (ctx Context) WithConsensusAddressCodec(consensusAddressCodec address.Codec) Context {
-	ctx.ConsensusAddressCodec = consensusAddressCodec
-	return ctx
-}
-
-// WithAddressPrefix returns the context with the provided address bech32 prefix.
-func (ctx Context) WithAddressPrefix(addressPrefix string) Context {
-	ctx.AddressPrefix = addressPrefix
-	return ctx
-}
-
-// WithValidatorPrefix returns the context with the provided validator bech32 prefix.
-func (ctx Context) WithValidatorPrefix(validatorPrefix string) Context {
-	ctx.ValidatorPrefix = validatorPrefix
-	return ctx
+// GetCmdContextWithFallback returns the CmdContext if it is not nil, otherwise it
+// returns context.Background()
+func (ctx Context) GetCmdContextWithFallback() context.Context {
+	if ctx.CmdContext != nil {
+		return ctx.CmdContext
+	}
+	return context.Background()
 }
 
 // PrintString prints the raw string to ctx.Output if it's defined, otherwise to os.Stdout
@@ -376,6 +357,18 @@ func (ctx Context) PrintBytes(o []byte) error {
 func (ctx Context) PrintProto(toPrint proto.Message) error {
 	// always serialize JSON initially because proto json can't be directly YAML encoded
 	out, err := ctx.Codec.MarshalJSON(toPrint)
+	if err != nil {
+		return err
+	}
+	return ctx.printOutput(out)
+}
+
+// PrintObjectLegacy is a variant of PrintProto that doesn't require a proto.Message type
+// and uses amino JSON encoding.
+//
+// Deprecated: It will be removed in the near future!
+func (ctx Context) PrintObjectLegacy(toPrint any) error {
+	out, err := ctx.LegacyAmino.MarshalJSON(toPrint)
 	if err != nil {
 		return err
 	}
@@ -432,11 +425,11 @@ func GetFromFields(clientCtx Context, kr keyring.Keyring, from string) (sdk.AccA
 		return nil, "", 0, nil
 	}
 
-	addr, err := clientCtx.AddressCodec.StringToBytes(from)
+	addr, err := sdk.AccAddressFromBech32(from)
 	switch {
 	case clientCtx.Simulate:
 		if err != nil {
-			return nil, "", 0, fmt.Errorf("a valid address must be provided in simulation mode: %w", err)
+			return nil, "", 0, fmt.Errorf("a valid bech32 address must be provided in simulation mode: %w", err)
 		}
 
 		return addr, "", 0, nil

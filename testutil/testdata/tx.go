@@ -1,13 +1,11 @@
 package testdata
 
 import (
-	"cosmossdk.io/math"
 	"testing"
 
 	"gotest.tools/v3/assert"
 	"pgregory.net/rapid"
 
-	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256r1"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
@@ -45,19 +43,10 @@ func KeyTestPubAddr() (cryptotypes.PrivKey, cryptotypes.PubKey, sdk.AccAddress) 
 	return key, pub, addr
 }
 
-// KeyTestPubAddrSecp256R1 generates a new secp256r1 keypair.
+// KeyTestPubAddr generates a new secp256r1 keypair.
 func KeyTestPubAddrSecp256R1(t *testing.T) (cryptotypes.PrivKey, cryptotypes.PubKey, sdk.AccAddress) {
-	t.Helper()
 	key, err := secp256r1.GenPrivKey()
 	assert.NilError(t, err)
-	pub := key.PubKey()
-	addr := sdk.AccAddress(pub.Address())
-	return key, pub, addr
-}
-
-// KeyTestPubAddrED25519 generates a new ed25519 keypair.
-func KeyTestPubAddrED25519() (cryptotypes.PrivKey, cryptotypes.PubKey, sdk.AccAddress) {
-	key := ed25519.GenPrivKey()
 	pub := key.PubKey()
 	addr := sdk.AccAddress(pub.Address())
 	return key, pub, addr
@@ -82,8 +71,7 @@ func NewTestMsg(addrs ...sdk.AccAddress) *TestMsg {
 	}
 
 	return &TestMsg{
-		Signers:  accAddresses,
-		DecField: math.LegacyZeroDec(),
+		Signers: accAddresses,
 	}
 }
 

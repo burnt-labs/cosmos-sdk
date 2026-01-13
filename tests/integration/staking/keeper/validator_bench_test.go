@@ -5,16 +5,17 @@ import (
 	"fmt"
 	"testing"
 
-	"cosmossdk.io/collections"
+	"github.com/stretchr/testify/require"
+
 	"cosmossdk.io/math"
 	storetypes "cosmossdk.io/store/types"
-	banktestutil "cosmossdk.io/x/bank/testutil"
-	"cosmossdk.io/x/staking/types"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	banktestutil "github.com/cosmos/cosmos-sdk/x/bank/testutil"
+	"github.com/cosmos/cosmos-sdk/x/staking/types"
 )
 
-func BenchmarkGetValidator(b *testing.B) {
+func BenchmarkGetValidator(tb *testing.B) {
 	// 900 is the max number we are allowed to use in order to avoid simtestutil.CreateTestPubKeys
 	// panic: encoding/hex: odd length hex string
 	powersNumber := 900
@@ -26,23 +27,21 @@ func BenchmarkGetValidator(b *testing.B) {
 		totalPower += int64(i)
 	}
 
-	f, _, valAddrs, vals := initValidators(b, totalPower, len(powers), powers)
+	f, _, valAddrs, vals := initValidators(tb, totalPower, len(powers), powers)
 
 	for _, validator := range vals {
-		if err := f.stakingKeeper.SetValidator(f.sdkCtx, validator); err != nil {
-			panic(err)
-		}
+		require.NoError(tb, f.stakingKeeper.SetValidator(f.sdkCtx, validator))
 	}
 
-	b.ResetTimer()
-	for n := 0; n < b.N; n++ {
+	tb.ResetTimer()
+	for n := 0; n < tb.N; n++ {
 		for _, addr := range valAddrs {
 			_, _ = f.stakingKeeper.GetValidator(f.sdkCtx, addr)
 		}
 	}
 }
 
-func BenchmarkGetValidatorDelegations(b *testing.B) {
+func BenchmarkGetValidatorDelegations(tb *testing.B) {
 	var totalPower int64
 	powersNumber := 10
 
@@ -52,22 +51,17 @@ func BenchmarkGetValidatorDelegations(b *testing.B) {
 		totalPower += int64(i)
 	}
 
-	f, _, valAddrs, vals := initValidators(b, totalPower, len(powers), powers)
+	f, _, valAddrs, vals := initValidators(tb, totalPower, len(powers), powers)
 	for _, validator := range vals {
-		if err := f.stakingKeeper.SetValidator(f.sdkCtx, validator); err != nil {
-			panic(err)
-		}
+		require.NoError(tb, f.stakingKeeper.SetValidator(f.sdkCtx, validator))
 	}
 
 	delegationsNum := 1000
 	for _, val := range valAddrs {
 		for i := 0; i < delegationsNum; i++ {
 			delegator := sdk.AccAddress(fmt.Sprintf("address%d", i))
-			err := banktestutil.FundAccount(f.sdkCtx, f.bankKeeper, delegator,
-				sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(int64(i)))))
-			if err != nil {
-				panic(err)
-			}
+			require.NoError(tb, banktestutil.FundAccount(f.sdkCtx, f.bankKeeper, delegator,
+				sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(int64(i))))))
 			NewDel := types.NewDelegation(delegator.String(), val.String(), math.LegacyNewDec(int64(i)))
 
 			if err := f.stakingKeeper.SetDelegation(f.sdkCtx, NewDel); err != nil {
@@ -76,13 +70,13 @@ func BenchmarkGetValidatorDelegations(b *testing.B) {
 		}
 	}
 
-	b.ResetTimer()
-	for n := 0; n < b.N; n++ {
+	tb.ResetTimer()
+	for n := 0; n < tb.N; n++ {
 		updateValidatorDelegations(f, valAddrs[0], sdk.ValAddress("val"))
 	}
 }
 
-func BenchmarkGetValidatorDelegationsLegacy(b *testing.B) {
+func BenchmarkGetValidatorDelegationsLegacy(tb *testing.B) {
 	var totalPower int64
 	powersNumber := 10
 
@@ -92,23 +86,17 @@ func BenchmarkGetValidatorDelegationsLegacy(b *testing.B) {
 		totalPower += int64(i)
 	}
 
-	f, _, valAddrs, vals := initValidators(b, totalPower, len(powers), powers)
+	f, _, valAddrs, vals := initValidators(tb, totalPower, len(powers), powers)
 
 	for _, validator := range vals {
-		if err := f.stakingKeeper.SetValidator(f.sdkCtx, validator); err != nil {
-			panic(err)
-		}
+		require.NoError(tb, f.stakingKeeper.SetValidator(f.sdkCtx, validator))
 	}
 
 	delegationsNum := 1000
 	for _, val := range valAddrs {
 		for i := 0; i < delegationsNum; i++ {
 			delegator := sdk.AccAddress(fmt.Sprintf("address%d", i))
-			err := banktestutil.FundAccount(f.sdkCtx, f.bankKeeper, delegator,
-				sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(int64(i)))))
-			if err != nil {
-				panic(err)
-			}
+			require.NoError(tb, banktestutil.FundAccount(f.sdkCtx, f.bankKeeper, delegator, sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(int64(i))))))
 			NewDel := types.NewDelegation(delegator.String(), val.String(), math.LegacyNewDec(int64(i)))
 			if err := f.stakingKeeper.SetDelegation(f.sdkCtx, NewDel); err != nil {
 				panic(err)
@@ -116,8 +104,8 @@ func BenchmarkGetValidatorDelegationsLegacy(b *testing.B) {
 		}
 	}
 
-	b.ResetTimer()
-	for n := 0; n < b.N; n++ {
+	tb.ResetTimer()
+	for n := 0; n < tb.N; n++ {
 		updateValidatorDelegationsLegacy(f, valAddrs[0], sdk.ValAddress("val"))
 	}
 }
@@ -151,31 +139,33 @@ func updateValidatorDelegationsLegacy(f *fixture, existingValAddr, newValAddr sd
 }
 
 func updateValidatorDelegations(f *fixture, existingValAddr, newValAddr sdk.ValAddress) {
-	k := f.stakingKeeper
+	storeKey := f.keys[types.StoreKey]
+	cdc, k := f.cdc, f.stakingKeeper
 
-	rng := collections.NewPrefixedPairRange[sdk.ValAddress, sdk.AccAddress](existingValAddr)
-	err := k.DelegationsByValidator.Walk(f.sdkCtx, rng, func(key collections.Pair[sdk.ValAddress, sdk.AccAddress], _ []byte) (stop bool, err error) {
-		valAddr, delAddr := key.K1(), key.K2()
+	store := f.sdkCtx.KVStore(storeKey)
 
-		delegation, err := k.Delegations.Get(f.sdkCtx, collections.Join(delAddr, valAddr))
+	itr := storetypes.KVStorePrefixIterator(store, types.GetDelegationsByValPrefixKey(existingValAddr))
+	defer itr.Close()
+
+	for ; itr.Valid(); itr.Next() {
+		key := itr.Key()
+		valAddr, delAddr, err := types.ParseDelegationsByValKey(key)
 		if err != nil {
-			return true, err
+			panic(err)
 		}
+
+		bz := store.Get(types.GetDelegationKey(delAddr, valAddr))
+		delegation := types.MustUnmarshalDelegation(cdc, bz)
 
 		// remove old operator addr from delegation
 		if err := k.RemoveDelegation(f.sdkCtx, delegation); err != nil {
-			return true, err
+			panic(err)
 		}
 
 		delegation.ValidatorAddress = newValAddr.String()
 		// add with new operator addr
 		if err := k.SetDelegation(f.sdkCtx, delegation); err != nil {
-			return true, err
+			panic(err)
 		}
-
-		return false, nil
-	})
-	if err != nil {
-		panic(err)
 	}
 }

@@ -3,7 +3,7 @@ package secp256r1
 import (
 	"testing"
 
-	"github.com/cosmos/gogoproto/proto"
+	proto "github.com/cosmos/gogoproto/proto"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -136,4 +136,26 @@ func (suite *PKSuite) TestJson() {
 	pk := &ecdsaPK{}
 	require.NoError(pk.UnmarshalJSON(bz))
 	require.Equal(suite.pk.Key, pk)
+}
+
+func (suite *PKSuite) TestNewPubKeyFromBytes() {
+	require := suite.Require()
+
+	originalBytes := suite.pk.Bytes()
+	newPk, err := NewPubKeyFromBytes(originalBytes)
+	require.NoError(err)
+	require.NotNil(newPk)
+	require.True(newPk.Equals(suite.pk))
+	require.Equal(originalBytes, newPk.Bytes())
+
+	_, err = NewPubKeyFromBytes([]byte{1, 2, 3})
+	require.Error(err)
+
+	_, err = NewPubKeyFromBytes(nil)
+	require.Error(err)
+
+	invalidBytes := make([]byte, pubKeySize)
+	invalidBytes[0] = 0x04
+	_, err = NewPubKeyFromBytes(invalidBytes)
+	require.Error(err)
 }

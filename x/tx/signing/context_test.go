@@ -9,7 +9,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	bankv1beta1 "cosmossdk.io/api/cosmos/bank/v1beta1"
-	groupv1 "cosmossdk.io/api/cosmos/group/v1"
+	govv1 "cosmossdk.io/api/cosmos/gov/v1"
+	"cosmossdk.io/core/address"
 	"cosmossdk.io/x/tx/internal/testpb"
 )
 
@@ -96,13 +97,10 @@ func TestGetSigners(t *testing.T) {
 		},
 		{
 			name: "MsgSubmitProposal",
-			msg: &groupv1.MsgSubmitProposal{
-				Proposers: []string{
-					hex.EncodeToString([]byte("foo")),
-					hex.EncodeToString([]byte("bar")),
-				},
+			msg: &govv1.MsgSubmitProposal{
+				Proposer: hex.EncodeToString([]byte("foo")),
 			},
-			want: [][]byte{[]byte("foo"), []byte("bar")},
+			want: [][]byte{[]byte("foo")},
 		},
 		{
 			name: "simple",
@@ -198,6 +196,27 @@ func TestGetSigners(t *testing.T) {
 			},
 			want: [][]byte{[]byte("foo")},
 		},
+		{
+			name: "validator signers",
+			msg: &testpb.ValidatorSigners{
+				Signers: []string{"val" + hex.EncodeToString([]byte("foo"))},
+			},
+			want: [][]byte{[]byte("foo")},
+		},
+		{
+			name: "validator bytes signer",
+			msg: &testpb.ValidatorByteSigner{
+				Signer: []byte("foo"),
+			},
+			want: [][]byte{[]byte("foo")},
+		},
+		{
+			name: "validator bytes signers",
+			msg: &testpb.ValidatorByteSigners{
+				Signers: [][]byte{[]byte("foo")},
+			},
+			want: [][]byte{[]byte("foo")},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -266,7 +285,7 @@ func TestDefineCustomGetSigners(t *testing.T) {
 	})
 	context, err = NewContext(options)
 	require.NoError(t, err)
-	require.ErrorContains(t, context.Validate(), "a custom signer function as been defined for message SimpleSigner")
+	require.ErrorContains(t, context.Validate(), "a custom signer function has been defined for message SimpleSigner")
 }
 
 type dummyAddressCodec struct{}
@@ -279,6 +298,8 @@ func (d dummyAddressCodec) BytesToString(bz []byte) (string, error) {
 	return hex.EncodeToString(bz), nil
 }
 
+var _ address.Codec = dummyAddressCodec{}
+
 type dummyValidatorAddressCodec struct{}
 
 func (d dummyValidatorAddressCodec) StringToBytes(text string) ([]byte, error) {
@@ -288,3 +309,5 @@ func (d dummyValidatorAddressCodec) StringToBytes(text string) ([]byte, error) {
 func (d dummyValidatorAddressCodec) BytesToString(bz []byte) (string, error) {
 	return "val" + hex.EncodeToString(bz), nil
 }
+
+var _ address.Codec = dummyValidatorAddressCodec{}

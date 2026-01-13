@@ -7,11 +7,12 @@ import (
 
 	"cosmossdk.io/depinject"
 	"cosmossdk.io/log"
-	"cosmossdk.io/x/distribution/types"
 
 	simtestutil "github.com/cosmos/cosmos-sdk/testutil/sims"
 	authkeeper "github.com/cosmos/cosmos-sdk/x/auth/keeper"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	"github.com/cosmos/cosmos-sdk/x/distribution/testutil"
+	"github.com/cosmos/cosmos-sdk/x/distribution/types"
 )
 
 func TestItCreatesModuleAccountOnInitBlock(t *testing.T) {
@@ -19,13 +20,13 @@ func TestItCreatesModuleAccountOnInitBlock(t *testing.T) {
 
 	app, err := simtestutil.SetupAtGenesis(
 		depinject.Configs(
-			AppConfig,
+			testutil.AppConfig,
 			depinject.Supply(log.NewNopLogger()),
 		),
 		&accountKeeper)
 	assert.NilError(t, err)
 
-	ctx := app.BaseApp.NewContext(false)
+	ctx := app.NewContext(false)
 	acc := accountKeeper.GetAccount(ctx, authtypes.NewModuleAddress(types.ModuleName))
 	assert.Assert(t, acc != nil)
 }

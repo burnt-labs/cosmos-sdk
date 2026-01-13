@@ -3,35 +3,14 @@
 package simapp
 
 import (
-	_ "embed"
-	"fmt"
 	"io"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // Import and register pgx driver
+	dbm "github.com/cosmos/cosmos-db"
 
 	clienthelpers "cosmossdk.io/client/v2/helpers"
-	"cosmossdk.io/core/address"
-	"cosmossdk.io/core/appmodule"
-	"cosmossdk.io/core/registry"
-	corestore "cosmossdk.io/core/store"
 	"cosmossdk.io/depinject"
-	_ "cosmossdk.io/indexer/postgres" // register the postgres indexer
 	"cosmossdk.io/log"
-	"cosmossdk.io/x/accounts"
-	basedepinject "cosmossdk.io/x/accounts/defaults/base/depinject"
-	lockupdepinject "cosmossdk.io/x/accounts/defaults/lockup/depinject"
-	multisigdepinject "cosmossdk.io/x/accounts/defaults/multisig/depinject"
-	"cosmossdk.io/x/accounts/testing/account_abstraction"
-	"cosmossdk.io/x/accounts/testing/counter"
-	bankkeeper "cosmossdk.io/x/bank/keeper"
-	circuitkeeper "cosmossdk.io/x/circuit/keeper"
-	consensuskeeper "cosmossdk.io/x/consensus/keeper"
-	distrkeeper "cosmossdk.io/x/distribution/keeper"
-	feegrantkeeper "cosmossdk.io/x/feegrant/keeper"
-	_ "cosmossdk.io/x/protocolpool"
-	slashingkeeper "cosmossdk.io/x/slashing/keeper"
-	stakingkeeper "cosmossdk.io/x/staking/keeper"
-	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
+	storetypes "cosmossdk.io/store/types"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client"
@@ -46,10 +25,22 @@ import (
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/cosmos/cosmos-sdk/x/auth"
 	"github.com/cosmos/cosmos-sdk/x/auth/ante"
-	"github.com/cosmos/cosmos-sdk/x/auth/ante/unorderedtx"
 	authkeeper "github.com/cosmos/cosmos-sdk/x/auth/keeper"
 	authsims "github.com/cosmos/cosmos-sdk/x/auth/simulation"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	authzkeeper "github.com/cosmos/cosmos-sdk/x/authz/keeper"
+	bankkeeper "github.com/cosmos/cosmos-sdk/x/bank/keeper"
+	consensuskeeper "github.com/cosmos/cosmos-sdk/x/consensus/keeper"
+	distrkeeper "github.com/cosmos/cosmos-sdk/x/distribution/keeper"
+	epochskeeper "github.com/cosmos/cosmos-sdk/x/epochs/keeper"
+	evidencekeeper "github.com/cosmos/cosmos-sdk/x/evidence/keeper"
+	feegrantkeeper "github.com/cosmos/cosmos-sdk/x/feegrant/keeper"
+	govkeeper "github.com/cosmos/cosmos-sdk/x/gov/keeper"
+	mintkeeper "github.com/cosmos/cosmos-sdk/x/mint/keeper"
+	protocolpoolkeeper "github.com/cosmos/cosmos-sdk/x/protocolpool/keeper"
+	slashingkeeper "github.com/cosmos/cosmos-sdk/x/slashing/keeper"
+	stakingkeeper "github.com/cosmos/cosmos-sdk/x/staking/keeper"
+	upgradekeeper "github.com/cosmos/cosmos-sdk/x/upgrade/keeper"
 )
 
 // DefaultNodeHome default home directories for the application daemon
@@ -65,23 +56,28 @@ var (
 // capabilities aren't needed for testing.
 type SimApp struct {
 	*runtime.App
-	legacyAmino       registry.AminoRegistrar
+	legacyAmino       *codec.LegacyAmino
 	appCodec          codec.Codec
 	txConfig          client.TxConfig
 	interfaceRegistry codectypes.InterfaceRegistry
 
-	// required keepers during wiring
-	// others keepers are all in the app
-	AccountsKeeper        accounts.Keeper
-	AuthKeeper            authkeeper.AccountKeeper
-	BankKeeper            bankkeeper.Keeper
+	// essential keepers
+	AccountKeeper         authkeeper.AccountKeeper
+	BankKeeper            bankkeeper.BaseKeeper
 	StakingKeeper         *stakingkeeper.Keeper
 	SlashingKeeper        slashingkeeper.Keeper
+	MintKeeper            mintkeeper.Keeper
 	DistrKeeper           distrkeeper.Keeper
+	GovKeeper             *govkeeper.Keeper
 	UpgradeKeeper         *upgradekeeper.Keeper
-	FeeGrantKeeper        feegrantkeeper.Keeper
+	EvidenceKeeper        evidencekeeper.Keeper
 	ConsensusParamsKeeper consensuskeeper.Keeper
-	CircuitBreakerKeeper  circuitkeeper.Keeper
+
+	// supplementary keepers
+	FeeGrantKeeper     feegrantkeeper.Keeper
+	AuthzKeeper        authzkeeper.Keeper
+	EpochsKeeper       *epochskeeper.Keeper
+	ProtocolPoolKeeper protocolpoolkeeper.Keeper
 
 	// simulation manager
 	sm *module.SimulationManager
@@ -95,20 +91,10 @@ func init() {
 	}
 }
 
-// AppConfig returns the default app config.
-func AppConfig() depinject.Config {
-	return depinject.Configs(
-		appConfig, // Alternatively use appconfig.LoadYAML(AppConfigYAML)
-		depinject.Provide(
-			ProvideExampleMintFn, // optional: override the mint module's mint function with epoched minting
-		),
-	)
-}
-
 // NewSimApp returns a reference to an initialized SimApp.
 func NewSimApp(
 	logger log.Logger,
-	db corestore.KVStoreWithBatch,
+	db dbm.DB,
 	traceStore io.Writer,
 	loadLatest bool,
 	appOpts servertypes.AppOptions,
@@ -120,12 +106,13 @@ func NewSimApp(
 
 		// merge the AppConfig and other configuration in one config
 		appConfig = depinject.Configs(
-			AppConfig(),
+			AppConfig,
 			depinject.Supply(
 				// supply the application options
 				appOpts,
 				// supply the logger
 				logger,
+
 				// ADVANCED CONFIGURATION
 
 				//
@@ -136,7 +123,7 @@ func NewSimApp(
 				//
 				// authtypes.RandomGenesisAccountsFn(simulation.RandomGenesisAccounts),
 				//
-				// For providing a custom a base account type add it below.
+				// For providing a custom base account type add it below.
 				// By default the auth module uses authtypes.ProtoBaseAccount().
 				//
 				// func() sdk.AccountI { return authtypes.ProtoBaseAccount() },
@@ -146,11 +133,10 @@ func NewSimApp(
 				// with the prefix defined in the auth module configuration.
 				//
 				// func() address.Codec { return <- custom address codec type -> }
-
 				//
 				// STAKING
 				//
-				// For provinding a different validator and consensus address codec, add it below.
+				// For providing a different validator and consensus address codec, add it below.
 				// By default the staking module uses the bech32 prefix provided in the auth config,
 				// and appends "valoper" and "valcons" for validator and consensus addresses respectively.
 				// When providing a custom address codec in auth, custom address codecs must be provided here as well.
@@ -163,54 +149,32 @@ func NewSimApp(
 				//
 
 				// For providing a custom inflation function for x/mint add here your
-				// custom function that implements the minttypes.MintFn interface.
-			),
-			depinject.Provide(
-				// inject desired account types:
-				multisigdepinject.ProvideAccount,
-				basedepinject.ProvideAccount,
-				lockupdepinject.ProvideAllLockupAccounts,
-
-				// provide base account options
-				basedepinject.ProvideSecp256K1PubKey,
-				// if you want to provide a custom public key you
-				// can do it from here.
-				// Example:
-				// 		basedepinject.ProvideCustomPubkey[Ed25519PublicKey]()
-				//
-				// You can also provide a custom public key with a custom validation function:
-				//
-				// 		basedepinject.ProvideCustomPubKeyAndValidationFunc(func(pub Ed25519PublicKey) error {
-				//			if len(pub.Key) != 64 {
-				//				return fmt.Errorf("invalid pub key size")
-				//			}
-				// 		})
-
-				// TESTING: do not add below account types
-				counter.ProvideAccount,
-				account_abstraction.ProvideAccount,
+				// custom minting function that implements the mintkeeper.MintFn
+				// interface.
 			),
 		)
 	)
 
-	var appModules map[string]appmodule.AppModule
 	if err := depinject.Inject(appConfig,
 		&appBuilder,
-		&appModules,
 		&app.appCodec,
 		&app.legacyAmino,
 		&app.txConfig,
 		&app.interfaceRegistry,
-		&app.AuthKeeper,
-		&app.AccountsKeeper,
+		&app.AccountKeeper,
 		&app.BankKeeper,
 		&app.StakingKeeper,
 		&app.SlashingKeeper,
+		&app.MintKeeper,
 		&app.DistrKeeper,
+		&app.GovKeeper,
 		&app.UpgradeKeeper,
+		&app.AuthzKeeper,
 		&app.FeeGrantKeeper,
+		&app.EvidenceKeeper,
 		&app.ConsensusParamsKeeper,
-		&app.CircuitBreakerKeeper,
+		&app.EpochsKeeper,
+		&app.ProtocolPoolKeeper,
 	); err != nil {
 		panic(err)
 	}
@@ -250,6 +214,11 @@ func NewSimApp(
 
 	app.App = appBuilder.Build(db, traceStore, baseAppOptions...)
 
+	// register streaming services
+	if err := app.RegisterStreamingServices(appOpts, app.kvStoreKeys()); err != nil {
+		panic(err)
+	}
+
 	/****  Module Options ****/
 
 	// RegisterUpgradeHandlers is used for registering any on-chain upgrades.
@@ -263,7 +232,7 @@ func NewSimApp(
 	// NOTE: this is not required apps that don't use the simulator for fuzz testing
 	// transactions
 	overrideModules := map[string]module.AppModuleSimulation{
-		authtypes.ModuleName: auth.NewAppModule(app.appCodec, app.AuthKeeper, &app.AccountsKeeper, authsims.RandomGenesisAccounts, nil),
+		authtypes.ModuleName: auth.NewAppModule(app.appCodec, app.AccountKeeper, authsims.RandomGenesisAccounts, nil),
 	}
 	app.sm = module.NewSimulationManagerFromAppModules(app.ModuleManager.Modules, overrideModules)
 
@@ -275,22 +244,13 @@ func NewSimApp(
 	// However, when registering a module manually (i.e. that does not support app wiring), the module version map
 	// must be set manually as follow. The upgrade module will de-duplicate the module version map.
 	//
-	// app.SetInitChainer(func(ctx sdk.Context, req *abci.InitChainRequest) (*abci.InitChainResponse, error) {
+	// app.SetInitChainer(func(ctx sdk.Context, req *abci.RequestInitChain) (*abci.ResponseInitChain, error) {
 	// 	app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap())
 	// 	return app.App.InitChainer(ctx, req)
 	// })
 
-	// register custom snapshot extensions (if any)
-	if manager := app.SnapshotManager(); manager != nil {
-		if err := manager.RegisterExtensions(
-			unorderedtx.NewSnapshotter(app.UnorderedTxManager),
-		); err != nil {
-			panic(fmt.Errorf("failed to register snapshot extension: %w", err))
-		}
-	}
-
-	// set custom ante handlers
-	app.setCustomAnteHandler()
+	// set custom ante handler
+	app.setAnteHandler(app.txConfig)
 
 	if err := app.Load(loadLatest); err != nil {
 		panic(err)
@@ -299,23 +259,16 @@ func NewSimApp(
 	return app
 }
 
-// setCustomAnteHandler overwrites default ante handlers with custom ante handlers
-// set SkipAnteHandler to true in app config and set custom ante handler on baseapp
-func (app *SimApp) setCustomAnteHandler() {
-	anteHandler, err := NewAnteHandler(
-		HandlerOptions{
-			ante.HandlerOptions{
-				AccountKeeper:            app.AuthKeeper,
-				BankKeeper:               app.BankKeeper,
-				ConsensusKeeper:          app.ConsensusParamsKeeper,
-				SignModeHandler:          app.txConfig.SignModeHandler(),
-				FeegrantKeeper:           app.FeeGrantKeeper,
-				SigGasConsumer:           ante.DefaultSigVerificationGasConsumer,
-				UnorderedTxManager:       app.UnorderedTxManager,
-				Environment:              app.AuthKeeper.Environment,
-				AccountAbstractionKeeper: app.AccountsKeeper,
-			},
-			&app.CircuitBreakerKeeper,
+// setAnteHandler sets custom ante handlers.
+// "x/auth/tx" pre-defined ante handler have been disabled in app_config.
+func (app *SimApp) setAnteHandler(txConfig client.TxConfig) {
+	anteHandler, err := ante.NewAnteHandler(
+		ante.HandlerOptions{
+			AccountKeeper:   app.AccountKeeper,
+			BankKeeper:      app.BankKeeper,
+			SignModeHandler: txConfig.SignModeHandler(),
+			FeegrantKeeper:  app.FeeGrantKeeper,
+			SigGasConsumer:  ante.DefaultSigVerificationGasConsumer,
 		},
 	)
 	if err != nil {
@@ -331,12 +284,7 @@ func (app *SimApp) setCustomAnteHandler() {
 // NOTE: This is solely to be used for testing purposes as it may be desirable
 // for modules to register their own custom testing types.
 func (app *SimApp) LegacyAmino() *codec.LegacyAmino {
-	switch cdc := app.legacyAmino.(type) {
-	case *codec.LegacyAmino:
-		return cdc
-	default:
-		panic("unexpected codec type")
-	}
+	return app.legacyAmino
 }
 
 // AppCodec returns SimApp's app codec.
@@ -355,6 +303,29 @@ func (app *SimApp) InterfaceRegistry() codectypes.InterfaceRegistry {
 // TxConfig returns SimApp's TxConfig
 func (app *SimApp) TxConfig() client.TxConfig {
 	return app.txConfig
+}
+
+// GetKey returns the KVStoreKey for the provided store key.
+//
+// NOTE: This is solely to be used for testing purposes.
+func (app *SimApp) GetKey(storeKey string) *storetypes.KVStoreKey {
+	sk := app.UnsafeFindStoreKey(storeKey)
+	kvStoreKey, ok := sk.(*storetypes.KVStoreKey)
+	if !ok {
+		return nil
+	}
+	return kvStoreKey
+}
+
+func (app *SimApp) kvStoreKeys() map[string]*storetypes.KVStoreKey {
+	keys := make(map[string]*storetypes.KVStoreKey)
+	for _, k := range app.GetStoreKeys() {
+		if kv, ok := k.(*storetypes.KVStoreKey); ok {
+			keys[kv.Name()] = kv
+		}
+	}
+
+	return keys
 }
 
 // SimulationManager implements the SimulationApp interface
@@ -385,9 +356,7 @@ func GetMaccPerms() map[string][]string {
 }
 
 // BlockedAddresses returns all the app's blocked account addresses.
-// This function takes an address.Codec parameter to maintain compatibility
-// with the signature of the same function in appV1.
-func BlockedAddresses(_ address.Codec) (map[string]bool, error) {
+func BlockedAddresses() map[string]bool {
 	result := make(map[string]bool)
 
 	if len(blockAccAddrs) > 0 {
@@ -400,5 +369,5 @@ func BlockedAddresses(_ address.Codec) (map[string]bool, error) {
 		}
 	}
 
-	return result, nil
+	return result
 }

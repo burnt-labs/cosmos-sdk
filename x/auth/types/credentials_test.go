@@ -10,7 +10,7 @@ import (
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 )
 
-func TestNewModuleCrendentials(t *testing.T) {
+func TestNewModuleCredentials(t *testing.T) {
 	// wrong derivation keys
 	_, err := authtypes.NewModuleCredential("group", []byte{})
 	require.Error(t, err, "derivation keys must be non empty")
@@ -19,11 +19,13 @@ func TestNewModuleCrendentials(t *testing.T) {
 
 	expected := sdk.MustAccAddressFromBech32("cosmos1fpn0w0yf4x300llf5r66jnfhgj4ul6cfahrvqsskwkhsw6sv84wsmz359y")
 
-	_, err = authtypes.NewModuleCredential("group")
+	credential, err := authtypes.NewModuleCredential("group")
 	require.NoError(t, err, "must be able to create a Root Module credential (see ADR-33)")
+	require.NoError(t, sdk.VerifyAddressFormat(credential.Address()))
 
-	credential, err := authtypes.NewModuleCredential("group", [][]byte{{0x20}, {0x0}}...)
+	credential, err = authtypes.NewModuleCredential("group", [][]byte{{0x20}, {0x0}}...)
 	require.NoError(t, err)
+	require.NoError(t, sdk.VerifyAddressFormat(credential.Address()))
 	addr, err := sdk.AccAddressFromHexUnsafe(credential.Address().String())
 	require.NoError(t, err)
 	require.Equal(t, expected.String(), addr.String())

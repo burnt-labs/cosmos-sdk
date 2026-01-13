@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	gogoproto "github.com/cosmos/gogoproto/proto"
-	"github.com/golang/protobuf/proto" //nolint: staticcheck // needed because gogoproto.Merge does not work consistently. See NOTE: comments.
+	"github.com/golang/protobuf/proto" //nolint:staticcheck // keep for compat
 	"google.golang.org/grpc"
 	proto2 "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -24,9 +24,7 @@ var (
 
 type Handler = func(ctx context.Context, request, response protoiface.MessageV1) error
 
-// MakeHybridHandler returns a handler that can handle both gogo and protov2 messages, no matter
-// if the handler is a gogo or protov2 handler.
-func MakeHybridHandler(cdc codec.BinaryCodec, sd *grpc.ServiceDesc, method grpc.MethodDesc, handler interface{}) (Handler, error) {
+func MakeHybridHandler(cdc codec.BinaryCodec, sd *grpc.ServiceDesc, method grpc.MethodDesc, handler any) (Handler, error) {
 	methodFullName := protoreflect.FullName(fmt.Sprintf("%s.%s", sd.ServiceName, method.MethodName))
 	desc, err := gogoproto.HybridResolver.FindDescriptorByName(methodFullName)
 	if err != nil {
@@ -195,7 +193,7 @@ func makeGogoHybridHandler(prefMethod protoreflect.MethodDescriptor, cdc codec.B
 // the type. Since the decoder function is passed in by the concrete implementer the expected
 // message where bytes are unmarshaled to, we can use that to determine the type.
 func isProtov2(md grpc.MethodDesc) (isV2Type bool, err error) {
-	pullRequestType := func(msg interface{}) error {
+	pullRequestType := func(msg any) error {
 		typ := reflect.TypeOf(msg)
 		switch {
 		case typ.Implements(protov2Type):
@@ -216,7 +214,7 @@ func isProtov2(md grpc.MethodDesc) (isV2Type bool, err error) {
 	// we are allowed to pass in a nil context and nil request, since we are not actually executing the request.
 	// this is made possible by the doNotExecute function which immediately returns without calling other handlers.
 	_, _ = md.Handler(nil, nil, pullRequestType, doNotExecute)
-	return
+	return isV2Type, err
 }
 
 // RequestFullNameFromMethodDesc returns the fully-qualified name of the request message of the provided service's method.
@@ -231,18 +229,4 @@ func RequestFullNameFromMethodDesc(sd *grpc.ServiceDesc, method grpc.MethodDesc)
 		return "", fmt.Errorf("invalid method descriptor %s", methodFullName)
 	}
 	return methodDesc.Input().FullName(), nil
-}
-
-// ResponseFullNameFromMethodDesc returns the fully-qualified name of the response message of the provided service's method.
-func ResponseFullNameFromMethodDesc(sd *grpc.ServiceDesc, method grpc.MethodDesc) (protoreflect.FullName, error) {
-	methodFullName := protoreflect.FullName(fmt.Sprintf("%s.%s", sd.ServiceName, method.MethodName))
-	desc, err := gogoproto.HybridResolver.FindDescriptorByName(methodFullName)
-	if err != nil {
-		return "", fmt.Errorf("cannot find method descriptor %s", methodFullName)
-	}
-	methodDesc, ok := desc.(protoreflect.MethodDescriptor)
-	if !ok {
-		return "", fmt.Errorf("invalid method descriptor %s", methodFullName)
-	}
-	return methodDesc.Output().FullName(), nil
 }

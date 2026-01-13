@@ -7,8 +7,8 @@ import (
 )
 
 // NewDeposit creates a new Deposit instance
-func NewDeposit(proposalID uint64, depositor string, amount sdk.Coins) Deposit {
-	return Deposit{proposalID, depositor, amount}
+func NewDeposit(proposalID uint64, depositor sdk.AccAddress, amount sdk.Coins) Deposit {
+	return Deposit{proposalID, depositor.String(), amount}
 }
 
 // Empty returns whether a deposit is empty.
@@ -19,7 +19,7 @@ func (d Deposit) Empty() bool {
 // Deposits is a collection of Deposit objects
 type Deposits []Deposit
 
-// Equal returns true if two slices (order-dependant) of deposits are equal.
+// Equal returns true if two slices (order-dependent) of deposits are equal.
 func (d Deposits) Equal(other Deposits) bool {
 	if len(d) != len(other) {
 		return false

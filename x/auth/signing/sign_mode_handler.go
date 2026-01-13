@@ -32,7 +32,7 @@ type SignModeHandler interface {
 type SignModeHandlerWithContext interface {
 	SignModeHandler
 
-	// GetSignBytesWithContext returns the sign bytes for the provided SignMode, SignerData and Tx,
+	// GetSignBytes returns the sign bytes for the provided SignMode, SignerData and Tx,
 	// or an error
 	GetSignBytesWithContext(ctx context.Context, mode signing.SignMode, data SignerData, tx sdk.Tx) ([]byte, error)
 }

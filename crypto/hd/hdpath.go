@@ -4,7 +4,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha512"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"math/big"
 	"path/filepath"
@@ -88,8 +87,8 @@ func NewParamsFromPath(path string) (*BIP44Params, error) {
 			fmt.Errorf("fourth and fifth field in path must not be hardened (ie. not contain the suffix ', got %s and %s", spl[3], spl[4])
 	}
 
-	if !(change == 0 || change == 1) {
-		return nil, errors.New("change field can only be 0 or 1")
+	if change != 0 && change != 1 {
+		return nil, fmt.Errorf("change field can only be 0 or 1")
 	}
 
 	return &BIP44Params{
@@ -156,12 +155,12 @@ func (p BIP44Params) String() string {
 		p.AddressIndex)
 }
 
-// ComputeMastersFromSeed returns the master secret key's, and chain code.
+// ComputeMastersFromSeed returns the master secret key, and chain code.
 func ComputeMastersFromSeed(seed []byte) (secret, chainCode [32]byte) {
 	curveIdentifier := []byte("Bitcoin seed")
 	secret, chainCode = i64(curveIdentifier, seed)
 
-	return
+	return secret, chainCode
 }
 
 // DerivePrivateKeyForPath derives the private key by following the BIP 32/44 path from privKeyBytes,
@@ -230,11 +229,11 @@ func derivePrivateKey(privKeyBytes, chainCode [32]byte, index uint32, harden boo
 		pubkeyBytes := ecPub.SerializeCompressed()
 		data = pubkeyBytes
 
-		// By using btcec, we can remove the dependency on tendermint/crypto/secp256k1
-		// pubkey := secp256k1.PrivKeySecp256k1(privKeyBytes).PubKey()
-		// public := pubkey.(secp256k1.PubKeySecp256k1)
-		// data = public[:]
-
+		/* By using btcec, we can remove the dependency on tendermint/crypto/secp256k1
+		pubkey := secp256k1.PrivKeySecp256k1(privKeyBytes).PubKey()
+		public := pubkey.(secp256k1.PubKeySecp256k1)
+		data = public[:]
+		*/
 	}
 
 	data = append(data, uint32ToBytes(index)...)
@@ -273,7 +272,7 @@ func i64(key, data []byte) (il, ir [32]byte) {
 	copy(il[:], I[:32])
 	copy(ir[:], I[32:])
 
-	return
+	return il, ir
 }
 
 // CreateHDPath returns BIP 44 object from account and index parameters.

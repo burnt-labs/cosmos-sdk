@@ -14,10 +14,6 @@ import (
 	reflectionv1 "cosmossdk.io/api/cosmos/reflection/v1"
 	"cosmossdk.io/depinject"
 	"cosmossdk.io/log"
-	_ "cosmossdk.io/x/accounts"
-	_ "cosmossdk.io/x/bank"
-	_ "cosmossdk.io/x/consensus"
-	_ "cosmossdk.io/x/staking"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
@@ -26,6 +22,10 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	_ "github.com/cosmos/cosmos-sdk/x/auth"
 	_ "github.com/cosmos/cosmos-sdk/x/auth/tx/config"
+	_ "github.com/cosmos/cosmos-sdk/x/bank"
+	_ "github.com/cosmos/cosmos-sdk/x/consensus"
+	_ "github.com/cosmos/cosmos-sdk/x/params"
+	_ "github.com/cosmos/cosmos-sdk/x/staking"
 )
 
 type fixture struct {
@@ -43,10 +43,9 @@ func initFixture(t assert.TestingT) *fixture {
 	app, err := simtestutil.Setup(
 		depinject.Configs(
 			configurator.NewAppConfig(
-				configurator.AccountsModule(),
 				configurator.AuthModule(),
 				configurator.TxModule(),
-				configurator.ValidateModule(),
+				configurator.ParamsModule(),
 				configurator.ConsensusModule(),
 				configurator.BankModule(),
 				configurator.StakingModule(),
@@ -57,9 +56,9 @@ func initFixture(t assert.TestingT) *fixture {
 	)
 	assert.NilError(t, err)
 
-	f.ctx = app.BaseApp.NewContext(false)
+	f.ctx = app.NewContext(false)
 	queryHelper := &baseapp.QueryServiceTestHelper{
-		GRPCQueryRouter: app.BaseApp.GRPCQueryRouter(),
+		GRPCQueryRouter: app.GRPCQueryRouter(),
 		Ctx:             f.ctx,
 	}
 	f.appQueryClient = appv1alpha1.NewQueryClient(queryHelper)
@@ -67,6 +66,30 @@ func initFixture(t assert.TestingT) *fixture {
 	f.reflectionClient = reflectionv1.NewReflectionServiceClient(queryHelper)
 
 	return f
+}
+
+func TestQueryAppConfig(t *testing.T) {
+	t.Parallel()
+	f := initFixture(t)
+
+	res, err := f.appQueryClient.Config(f.ctx, &appv1alpha1.QueryConfigRequest{}) //nolint:staticcheck // used for testing the deprecated code
+	assert.NilError(t, err)
+	// app config is not nil
+	assert.Assert(t, res != nil && res.Config != nil)
+
+	moduleConfigs := map[string]*appv1alpha1.ModuleConfig{}
+	for _, module := range res.Config.Modules {
+		moduleConfigs[module.Name] = module
+	}
+
+	// has all expected modules
+	for _, modName := range []string{"auth", "bank", "tx", "consensus", "runtime", "params", "staking"} {
+		modConfig := moduleConfigs[modName]
+		if modConfig == nil {
+			t.Fatalf("missing %s", modName)
+		}
+		assert.Assert(t, modConfig.Config != nil)
+	}
 }
 
 func TestReflectionService(t *testing.T) {

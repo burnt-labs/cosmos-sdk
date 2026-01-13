@@ -3,9 +3,9 @@ package mock
 import (
 	"io"
 
+	dbm "github.com/cosmos/cosmos-db"
 	protoio "github.com/cosmos/gogoproto/io"
 
-	corestore "cosmossdk.io/core/store"
 	"cosmossdk.io/store/metrics"
 	pruningtypes "cosmossdk.io/store/pruning/types"
 	snapshottypes "cosmossdk.io/store/snapshots/types"
@@ -90,7 +90,7 @@ func (ms multiStore) GetCommitStore(key storetypes.StoreKey) storetypes.CommitSt
 	panic("not implemented")
 }
 
-func (ms multiStore) MountStoreWithDB(key storetypes.StoreKey, typ storetypes.StoreType, db corestore.KVStoreWithBatch) {
+func (ms multiStore) MountStoreWithDB(key storetypes.StoreKey, typ storetypes.StoreType, db dbm.DB) {
 	ms.kv[key] = kvStore{store: make(map[string][]byte)}
 }
 
@@ -112,6 +112,10 @@ func (ms multiStore) LoadVersion(ver int64) error {
 
 func (ms multiStore) GetKVStore(key storetypes.StoreKey) storetypes.KVStore {
 	return ms.kv[key]
+}
+
+func (ms multiStore) GetObjKVStore(storetypes.StoreKey) storetypes.ObjKVStore {
+	panic("not implemented")
 }
 
 func (ms multiStore) GetStore(key storetypes.StoreKey) storetypes.Store {
@@ -139,6 +143,10 @@ func (ms multiStore) SetIAVLCacheSize(size int) {
 }
 
 func (ms multiStore) SetIAVLDisableFastNode(disable bool) {
+	panic("not implemented")
+}
+
+func (ms multiStore) SetIAVLSyncPruning(syncPruning bool) {
 	panic("not implemented")
 }
 
@@ -178,7 +186,7 @@ func (kv kvStore) CacheWrap() storetypes.CacheWrap {
 	panic("not implemented")
 }
 
-func (kv kvStore) CacheWrapWithTrace(w io.Writer, tc storetypes.TraceContext) storetypes.CacheWrap {
+func (kv kvStore) CacheWrapWithTrace(_ io.Writer, _ storetypes.TraceContext) storetypes.CacheWrap {
 	panic("not implemented")
 }
 

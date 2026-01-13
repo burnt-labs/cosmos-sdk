@@ -5,169 +5,209 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
-	"cosmossdk.io/core/header"
-	storetypes "cosmossdk.io/store/types"
-
+	"github.com/cosmos/cosmos-sdk/codec"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/cosmos/cosmos-sdk/testutil/testdata"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
 	"github.com/cosmos/cosmos-sdk/x/auth/ante"
-	"github.com/cosmos/cosmos-sdk/x/auth/ante/unorderedtx"
+	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
+	txmodule "github.com/cosmos/cosmos-sdk/x/auth/tx/config"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 )
 
-const gasConsumed = uint64(25)
-
-func TestUnorderedTxDecorator_OrderedTx(t *testing.T) {
-	txm := unorderedtx.NewManager(t.TempDir())
-	defer func() {
-		require.NoError(t, txm.Close())
-	}()
-
-	txm.Start()
-
-	suite := SetupTestSuite(t, false)
-
-	chain := sdk.ChainAnteDecorators(ante.NewUnorderedTxDecorator(unorderedtx.DefaultMaxTimeoutDuration, txm, suite.accountKeeper.GetEnvironment(), ante.DefaultSha256Cost))
-
-	tx, txBz := genUnorderedTx(t, false, time.Time{})
-	ctx := sdk.Context{}.WithTxBytes(txBz)
-
-	_, err := chain(ctx, tx, false)
-	require.NoError(t, err)
+type UnorderedTxTestSuite struct {
+	anteSuite           *AnteTestSuite
+	priv1, priv2, priv3 cryptotypes.PrivKey
+	antehandler         sdk.AnteHandler
+	defaultSignMode     signing.SignMode
+	accs                []sdk.AccountI
+	msgs                []sdk.Msg
 }
 
-func TestUnorderedTxDecorator_UnorderedTx_NoTTL(t *testing.T) {
-	txm := unorderedtx.NewManager(t.TempDir())
-	defer func() {
-		require.NoError(t, txm.Close())
-	}()
-
-	txm.Start()
-
-	suite := SetupTestSuite(t, false)
-
-	chain := sdk.ChainAnteDecorators(ante.NewUnorderedTxDecorator(unorderedtx.DefaultMaxTimeoutDuration, txm, suite.accountKeeper.GetEnvironment(), ante.DefaultSha256Cost))
-
-	tx, txBz := genUnorderedTx(t, true, time.Time{})
-	ctx := sdk.Context{}.WithTxBytes(txBz)
-
-	_, err := chain(ctx, tx, false)
-	require.Error(t, err)
-}
-
-func TestUnorderedTxDecorator_UnorderedTx_InvalidTTL(t *testing.T) {
-	txm := unorderedtx.NewManager(t.TempDir())
-	defer func() {
-		require.NoError(t, txm.Close())
-	}()
-
-	txm.Start()
-
-	suite := SetupTestSuite(t, false)
-
-	chain := sdk.ChainAnteDecorators(ante.NewUnorderedTxDecorator(unorderedtx.DefaultMaxTimeoutDuration, txm, suite.accountKeeper.GetEnvironment(), ante.DefaultSha256Cost))
-
-	tx, txBz := genUnorderedTx(t, true, time.Now().Add(unorderedtx.DefaultMaxTimeoutDuration+time.Second))
-	ctx := sdk.Context{}.WithTxBytes(txBz).WithHeaderInfo(header.Info{Time: time.Now()})
-	_, err := chain(ctx, tx, false)
-	require.Error(t, err)
-}
-
-func TestUnorderedTxDecorator_UnorderedTx_AlreadyExists(t *testing.T) {
-	txm := unorderedtx.NewManager(t.TempDir())
-	defer func() {
-		require.NoError(t, txm.Close())
-	}()
-
-	txm.Start()
-
-	suite := SetupTestSuite(t, false)
-
-	chain := sdk.ChainAnteDecorators(ante.NewUnorderedTxDecorator(unorderedtx.DefaultMaxTimeoutDuration, txm, suite.accountKeeper.GetEnvironment(), ante.DefaultSha256Cost))
-
-	tx, txBz := genUnorderedTx(t, true, time.Now().Add(time.Minute))
-	ctx := sdk.Context{}.WithTxBytes(txBz).WithHeaderInfo(header.Info{Time: time.Now()}).WithGasMeter(storetypes.NewGasMeter(gasConsumed))
-
-	bz := [32]byte{}
-	copy(bz[:], txBz[:32])
-	txm.Add(bz, time.Now().Add(time.Minute))
-
-	_, err := chain(ctx, tx, false)
-	require.Error(t, err)
-}
-
-func TestUnorderedTxDecorator_UnorderedTx_ValidCheckTx(t *testing.T) {
-	txm := unorderedtx.NewManager(t.TempDir())
-	defer func() {
-		require.NoError(t, txm.Close())
-	}()
-
-	txm.Start()
-
-	suite := SetupTestSuite(t, false)
-
-	chain := sdk.ChainAnteDecorators(ante.NewUnorderedTxDecorator(unorderedtx.DefaultMaxTimeoutDuration, txm, suite.accountKeeper.GetEnvironment(), ante.DefaultSha256Cost))
-
-	tx, txBz := genUnorderedTx(t, true, time.Now().Add(time.Minute))
-	ctx := sdk.Context{}.WithTxBytes(txBz).WithHeaderInfo(header.Info{Time: time.Now()}).WithExecMode(sdk.ExecModeCheck).WithGasMeter(storetypes.NewGasMeter(gasConsumed))
-
-	_, err := chain(ctx, tx, false)
-	require.NoError(t, err)
-}
-
-func TestUnorderedTxDecorator_UnorderedTx_ValidDeliverTx(t *testing.T) {
-	txm := unorderedtx.NewManager(t.TempDir())
-	defer func() {
-		require.NoError(t, txm.Close())
-	}()
-
-	txm.Start()
-
-	suite := SetupTestSuite(t, false)
-
-	chain := sdk.ChainAnteDecorators(ante.NewUnorderedTxDecorator(unorderedtx.DefaultMaxTimeoutDuration, txm, suite.accountKeeper.GetEnvironment(), ante.DefaultSha256Cost))
-
-	tx, txBz := genUnorderedTx(t, true, time.Now().Add(time.Minute))
-	ctx := sdk.Context{}.WithTxBytes(txBz).WithHeaderInfo(header.Info{Time: time.Now()}).WithExecMode(sdk.ExecModeFinalize).WithGasMeter(storetypes.NewGasMeter(gasConsumed))
-
-	_, err := chain(ctx, tx, false)
-	require.NoError(t, err)
-
-	bz := [32]byte{}
-	copy(bz[:], txBz[:32])
-
-	require.True(t, txm.Contains(bz))
-}
-
-func genUnorderedTx(t *testing.T, unordered bool, timestamp time.Time) (sdk.Tx, []byte) {
+func setupUnorderedTxTestSuite(t *testing.T, isCheckTx, withUnordered bool) *UnorderedTxTestSuite {
 	t.Helper()
+	anteSuite := SetupTestSuiteWithUnordered(t, isCheckTx, withUnordered)
+	anteSuite.txBankKeeper.EXPECT().DenomMetadata(gomock.Any(), gomock.Any()).Return(&banktypes.QueryDenomMetadataResponse{}, nil).AnyTimes()
 
-	s := SetupTestSuite(t, true)
-	s.txBuilder = s.clientCtx.TxConfig.NewTxBuilder()
+	enabledSignModes := []signing.SignMode{signing.SignMode_SIGN_MODE_DIRECT}
+	txConfigOpts := authtx.ConfigOptions{
+		TextualCoinMetadataQueryFn: txmodule.NewGRPCCoinMetadataQueryFn(anteSuite.clientCtx),
+		EnabledSignModes:           enabledSignModes,
+	}
+	var err error
+	anteSuite.clientCtx.TxConfig, err = authtx.NewTxConfigWithOptions(
+		codec.NewProtoCodec(anteSuite.encCfg.InterfaceRegistry),
+		txConfigOpts,
+	)
+	require.NoError(t, err)
+	anteSuite.txBuilder = anteSuite.clientCtx.TxConfig.NewTxBuilder()
+
+	// make block height non-zero to ensure account numbers part of signBytes
+	anteSuite.ctx = anteSuite.ctx.WithBlockHeight(1)
 
 	// keys and addresses
-	priv1, _, addr1 := testdata.KeyTestPubAddr()
+	pk1, _, addr1 := testdata.KeyTestPubAddr()
+	pk2, _, addr2 := testdata.KeyTestPubAddr()
+	pk3, _, addr3 := testdata.KeyTestPubAddr()
+	priv1, priv2, priv3 := pk1, pk2, pk3
 
-	// msg and signatures
-	msg := testdata.NewTestMsg(addr1)
+	addrs := []sdk.AccAddress{addr1, addr2, addr3}
+
+	msgs := make([]sdk.Msg, len(addrs))
+	accs := make([]sdk.AccountI, len(addrs))
+	// set accounts and create msg for each address
+	for i, addr := range addrs {
+		acc := anteSuite.accountKeeper.NewAccountWithAddress(anteSuite.ctx, addr)
+		require.NoError(t, acc.SetAccountNumber(uint64(i)+1000))
+		anteSuite.accountKeeper.SetAccount(anteSuite.ctx, acc)
+		msgs[i] = testdata.NewTestMsg(addr)
+		accs[i] = acc
+	}
+
+	spkd := ante.NewSetPubKeyDecorator(anteSuite.accountKeeper)
+	txConfigOpts = authtx.ConfigOptions{
+		TextualCoinMetadataQueryFn: txmodule.NewBankKeeperCoinMetadataQueryFn(anteSuite.txBankKeeper),
+		EnabledSignModes:           enabledSignModes,
+	}
+	anteTxConfig, err := authtx.NewTxConfigWithOptions(
+		codec.NewProtoCodec(anteSuite.encCfg.InterfaceRegistry),
+		txConfigOpts,
+	)
+	require.NoError(t, err)
+	svd := ante.NewSigVerificationDecorator(anteSuite.accountKeeper, anteTxConfig.SignModeHandler())
+	antehandler := sdk.ChainAnteDecorators(spkd, svd)
+	defaultSignMode := signing.SignMode_SIGN_MODE_DIRECT
+
+	return &UnorderedTxTestSuite{
+		anteSuite:       anteSuite,
+		priv1:           priv1,
+		priv2:           priv2,
+		priv3:           priv3,
+		antehandler:     antehandler,
+		defaultSignMode: defaultSignMode,
+		accs:            accs,
+		msgs:            msgs,
+	}
+}
+
+func TestSigVerification_UnorderedTxs(t *testing.T) {
 	feeAmount := testdata.NewTestFeeAmount()
 	gasLimit := testdata.NewTestGasLimit()
-	require.NoError(t, s.txBuilder.SetMsgs(msg))
+	testCases := map[string]struct {
+		unorderedDisabled bool
+		unordered         bool
+		timeout           time.Time
+		blockTime         time.Time
+		duplicate         bool
+		execMode          sdk.ExecMode
+		expectedErr       string
+	}{
+		"normal/ordered tx should just skip": {
+			unordered: false,
+			blockTime: time.Unix(0, 0),
+			execMode:  sdk.ExecModeFinalize,
+		},
+		"normal/ordered tx should just skip with unordered disabled too": {
+			unorderedDisabled: true,
+			unordered:         false,
+			blockTime:         time.Unix(0, 0),
+			execMode:          sdk.ExecModeFinalize,
+		},
+		"happy case": {
+			unordered: true,
+			timeout:   time.Unix(10, 0),
+			blockTime: time.Unix(0, 0),
+			execMode:  sdk.ExecModeFinalize,
+		},
+		"zero time should fail": {
+			unordered:   true,
+			blockTime:   time.Unix(10, 0),
+			execMode:    sdk.ExecModeFinalize,
+			expectedErr: "unordered transaction must have timeout_timestamp set",
+		},
+		"fail if tx is unordered but unordered is disabled": {
+			unorderedDisabled: true,
+			unordered:         true,
+			blockTime:         time.Unix(10, 0),
+			execMode:          sdk.ExecModeFinalize,
+			expectedErr:       "unordered transactions are not enabled",
+		},
+		"timeout before current block time should fail": {
+			unordered:   true,
+			timeout:     time.Unix(7, 0),
+			blockTime:   time.Unix(10, 1),
+			execMode:    sdk.ExecModeFinalize,
+			expectedErr: "unordered transaction has a timeout_timestamp that has already passed",
+		},
+		"timeout equal to current block time should pass": {
+			unordered: true,
+			timeout:   time.Unix(10, 0),
+			blockTime: time.Unix(10, 0),
+			execMode:  sdk.ExecModeFinalize,
+		},
+		"timeout after the max duration should fail": {
+			unordered:   true,
+			timeout:     time.Unix(10, 1).Add(ante.DefaultMaxTimeoutDuration),
+			blockTime:   time.Unix(10, 0),
+			execMode:    sdk.ExecModeFinalize,
+			expectedErr: "unordered tx ttl exceeds",
+		},
+		"fails if manager has duplicate": {
+			unordered:   true,
+			timeout:     time.Unix(10, 0),
+			duplicate:   true,
+			blockTime:   time.Unix(5, 0),
+			execMode:    sdk.ExecModeFinalize,
+			expectedErr: "already used timeout",
+		},
+		"duplicate doesn't matter if we're in simulate mode": {
+			unordered: true,
+			timeout:   time.Unix(10, 0),
+			duplicate: true,
+			blockTime: time.Unix(5, 0),
+			execMode:  sdk.ExecModeSimulate,
+		},
+	}
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			suite := setupUnorderedTxTestSuite(t, tc.execMode == sdk.ExecModeCheck, !tc.unorderedDisabled)
+			ctx := suite.anteSuite.ctx.WithBlockTime(tc.blockTime).WithExecMode(tc.execMode).WithIsSigverifyTx(true)
 
-	s.txBuilder.SetFeeAmount(feeAmount)
-	s.txBuilder.SetGasLimit(gasLimit)
-	s.txBuilder.SetUnordered(unordered)
-	s.txBuilder.SetTimeoutTimestamp(timestamp)
+			suite.anteSuite.txBuilder = suite.anteSuite.clientCtx.TxConfig.NewTxBuilder() // Create new txBuilder for each test
+			require.NoError(t, suite.anteSuite.txBuilder.SetMsgs(suite.msgs...))
+			suite.anteSuite.txBuilder.SetFeeAmount(feeAmount)
+			suite.anteSuite.txBuilder.SetGasLimit(gasLimit)
+			tx, err := suite.anteSuite.CreateTestUnorderedTx(
+				suite.anteSuite.ctx,
+				[]cryptotypes.PrivKey{suite.priv1, suite.priv2, suite.priv3},
+				[]uint64{suite.accs[0].GetAccountNumber(), suite.accs[1].GetAccountNumber(), suite.accs[2].GetAccountNumber()},
+				[]uint64{0, 0, 0},
+				suite.anteSuite.ctx.ChainID(),
+				suite.defaultSignMode,
+				tc.unordered,
+				tc.timeout,
+			)
+			require.NoError(t, err)
+			txBytes, err := suite.anteSuite.clientCtx.TxConfig.TxEncoder()(tx)
+			require.NoError(t, err)
+			ctx = ctx.WithTxBytes(txBytes)
 
-	privKeys, accNums, accSeqs := []cryptotypes.PrivKey{priv1}, []uint64{0}, []uint64{0}
-	tx, err := s.CreateTestTx(s.ctx, privKeys, accNums, accSeqs, s.ctx.ChainID(), signing.SignMode_SIGN_MODE_DIRECT)
-	require.NoError(t, err)
+			simulate := tc.execMode == sdk.ExecModeSimulate
 
-	txBz, err := ante.TxIdentifier(uint64(timestamp.Unix()), tx)
+			if tc.duplicate {
+				_, err = suite.antehandler(ctx, tx, simulate)
+				require.NoError(t, err)
+			}
 
-	require.NoError(t, err)
-
-	return tx, txBz[:]
+			_, err = suite.antehandler(ctx, tx, simulate)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

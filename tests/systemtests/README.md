@@ -1,61 +1,35 @@
-# Testing
+# System tests
 
-Test framework for system tests. 
-Starts and interacts with a (multi node) blockchain in Go.
-Supports
+Go black box tests that setup and interact with a local blockchain. The system test [framework](../../systemtests) 
+works with the compiled binary of the chain artifact only.
+To get up to speed, checkout the [getting started guide](../../systemtests/GETTING_STARTED.md).
 
-* CLI
-* Servers
-* Events
-* RPC
+Besides the Go tests and testdata files, this directory can contain the following directories: 
 
-Uses:
+* `binaries` - cache for binary
+* `testnet` - node files
 
-* testify
-* gjson
-* sjson
+Please make sure to not add or push them to git. 
 
-Server and client side are executed on the host machine.
+## Execution
 
-## Developer
+Build a new binary from current branch and copy it to the `tests/systemtests/binaries` folder by running system tests.
+In project root:
 
-### Test strategy
-
-System tests cover the full stack via cli and a running (multi node) network. They are more expensive (in terms of time/ cpu) 
-to run compared to unit or integration tests. 
-Therefore, we focus on the **critical path** and do not cover every condition.
-
-## How to use
-
-Read the [getting_started.md](getting_started.md) guide to get started.
-
-### Execute a single test
-
-```sh
-go test -tags system_test -count=1 -v . --run TestStakeUnstake  -verbose
+```shell
+make test-system
 ```
 
-Test cli parameters
+Or via manual steps
 
-* `-verbose` verbose output
-* `-wait-time` duration - time to wait for chain events (default 30s)
-* `-nodes-count` int - number of nodes in the cluster (default 4)
+```shell
+make build
+mkdir -p ./tests/systemtests/binaries
+cp ./build/simd ./tests/systemtests/binaries/
+```
 
-# Port ranges
+### Manual test run
 
-With *n* nodes:
-
-* `26657` - `26657+n` - RPC
-* `1317` - `1317+n` - API
-* `9090` - `9090+n` - GRPC
-* `16656` - `16656+n` - P2P
-
-For example Node *3* listens on `26660` for RPC calls
-
-## Resources
-
-* [gjson query syntax](https://github.com/tidwall/gjson#path-syntax)
-
-## Disclaimer
-
-This is based on the system test framework in [wasmd](https://github.com/CosmWasm/wasmd) built by Confio.
+```shell
+go test -v -mod=readonly -failfast -tags='system_test' --run TestStakeUnstake    ./... --verbose
+```
