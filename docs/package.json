@@ -15,28 +15,36 @@
     "clear": "docusaurus clear",
     "serve": "docusaurus serve",
     "write-translations": "docusaurus write-translations",
-    "write-heading-ids": "docusaurus write-heading-ids"
+    "write-heading-ids": "docusaurus write-heading-ids",
+    "check:dependency-security": "node scripts/check-image-size-security.js"
   },
   "dependencies": {
-    "@docusaurus/core": "3.7.0",
-    "@docusaurus/plugin-client-redirects": "^3.7.0",
-    "@docusaurus/plugin-google-analytics": "^3.7.0",
-    "@docusaurus/preset-classic": "3.7.0",
-    "@mdx-js/react": "^1.6.22",
+    "@docusaurus/core": "3.10.2",
+    "@docusaurus/plugin-client-redirects": "3.10.2",
+    "@docusaurus/plugin-google-analytics": "3.10.2",
+    "@docusaurus/preset-classic": "3.10.2",
+    "@mdx-js/react": "^3.1.1",
     "@you54f/theme-github-codeblock": "^0.1.1",
     "autoprefixer": "^10.4.14",
     "clsx": "^1.2.1",
-    "postcss": "^8.5.22",
+    "postcss": "^8.5.23",
     "postcss-import": "^15.1.0",
-    "prism-react-renderer": "^1.3.5",
-    "react": "^17.0.2",
-    "react-dom": "^17.0.2",
+    "image-size": "file:third_party/image-size",
+    "prism-react-renderer": "^2.4.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "tailwindcss": "^3.3.2"
   },
   "devDependencies": {
-    "@docusaurus/module-type-aliases": "2.4.1"
+    "@docusaurus/module-type-aliases": "3.10.2"
   },
   "overrides": {
+    "image-size": "$image-size",
+    "serialize-javascript": "7.0.5",
+    "sockjs": {
+      "uuid": "11.1.1"
+    },
+    "webpack-dev-server": "5.2.6",
     "trim": "0.0.3"
   },
   "browserslist": {
